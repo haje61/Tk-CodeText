@@ -1,4 +1,8 @@
-MANIFEST
-Makefile.PL
-README
 CHANGES
+lib/Tk/CodeText.pm
+lib/Tk/XText.pm
+Makefile.PL
+MANIFEST
+README.md
+t/1-Tk-XText.t
+t/2-Tk-CodeText.t
