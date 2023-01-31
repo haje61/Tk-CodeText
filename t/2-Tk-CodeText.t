@@ -8,7 +8,7 @@ BEGIN { use_ok('Tk::CodeText') };
 
 createapp;
 
-my $text = $app->XText->pack(
+my $text = $app->CodeText->pack(
 		-expand => 1,
 		-fill => 'both',
 	) if defined $app;
