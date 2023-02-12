@@ -1,21 +1,11 @@
 
 use strict;
 use warnings;
-use Test::More tests => 44;
+use Test::More tests => 111;
 use Test::Tk;
 use Tk;
 
 BEGIN { use_ok('Tk::XText') };
-
-my $original = "one\ntwo\n";
-my $indentedline = "\tone\ntwo\n";
-my $indentedsel = "\tone\n\ttwo\n";
-
-my $commentline1 = "#one\ntwo\n";
-my $commentsel1 = "#one\n#two\n";
-
-my $commentline2 = "<<-one->>\ntwo\n";
-my $commentsel2 = "<<-one\ntwo\n->>";
 
 createapp;
 
@@ -48,7 +38,7 @@ if (defined $app) {
 		} else {
 			$mod = 'SAVED'
 		}
-		$app->after(200, $call);
+		$app->after(500, $call);
 	};
 	
 	my $sb = $app->Frame->pack(-fill => 'x');
@@ -89,170 +79,302 @@ if (defined $app) {
 	)->pack(-side => 'left', -pady => 2);
 	$sb->Button(
 		-text=> 'Reset', 
-		-command => ['EmptyDocument', $text], 
+		-command => ['clear', $text], 
+	)->pack(-side => 'left', -pady => 2);
+	$sb->Button(
+		-text=> 'Clear modified', 
+		-command => ['editModified', $text, 0], 
 	)->pack(-side => 'left', -pady => 2);
 	&$call;
 }
 
-@tests = (
-	[ sub { return defined $text }, 1, 'XText widget created' ],
+#testvalues
+my $firstline = "one";
+my $middleline =  "otwo\n";
+my $secondline = "\ntwo\n";
+my $original = "one\ntwo\n";
+my $indentedline = "\tone\ntwo\n";
+my $indentedsel = "\tone\n\ttwo\n";
 
+my $commentline1 = "#one\ntwo\n";
+my $commentsel1 = "#one\n#two\n";
+
+my $commentline2 = "<<-one->>\ntwo\n";
+my $commentsel2 = "<<-one\ntwo\n->>";
+
+#some predifined tests and routines
+my $init = [ sub { 
+	$text->clear; 
+	$text->insert('1.0', $original);
+	$text->editModified(0);
+	return $text->get('1.0', 'end - 1c');
+}, $original, 'Initialise with original text'];
+my $ismodified = [ sub { return ($text->editModified >= 1) }, 1, 'Is modified'];
+my $isnotmodified = [ sub { return $text->editModified }, 0, 'Is not modified'];
+my $reset = [ sub { $text->clear; return $text->get('1.0', 'end - 1c') }, '', 'Reset widget'];
+
+sub backspace {
+	my $len = shift;
+	$len = 1 unless defined $len;
+	while ($len) {
+		$text->Backspace;
+		$len --;
+	}
+}
+
+sub del {
+	my $len = shift;
+	$len = 1 unless defined $len;
+	while ($len) {
+		$text->Delete;
+		$len --;
+	}
+	
+}
+
+sub gettext {
+	return $text->get('1.0','end - 1c')
+}
+
+sub goTo {
+	$text->goTo(shift);
+}
+
+sub enter {
+	my $string = shift;
+	while (length($string) ne 0) {
+		$string =~ s/^([\s|\S])//;
+		$text->InsertKeypress($1);
+	}
+}
+
+sub ismodified {
+	return $text->editModified(shift)
+}
+
+push @tests, (
+	[ sub { return defined $text }, 1, 'XText widget created' ],
+);
+
+#testing accessors
+my @accessors = qw(Buffer BufferMode BufferModified BufferReplace BufferStart);
+for (@accessors) {
+	my $method = $_;
+	push @tests, [sub {
+		my $default = $text->$method;
+		my $res1 = $text->$method('blieb');
+		my $res2 = $text->$method('quep');
+		$text->$method($default);
+		return (($res1 eq 'blieb') and ($res2 eq 'quep'));
+	}, 1, "Accessor $method"];
+}
+
+push @tests, (
 
 	#testing inserting and undo redo
 	[ sub {
-		$text->insert('end -1c', $original);
-		return $text->get('1.0', 'end - 1c'); 
+		$text->insert('1.0', $original);
+		return gettext; 
 	}, $original, 'Inserted text' ],
+	
+	$ismodified,
 
 	[ sub {
 		$text->undo;
-		my $t = $text->get('1.0', 'end - 1c');
-		print "result '$t'\n";
-		return $text->get('1.0', 'end - 1c'); 
+		my $t = gettext;
+		return gettext; 
 	}, '', 'Undo Inserted text' ],
+	
+	$isnotmodified,
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Redo Inserted text' ],
 
+	$ismodified,
+
+	[ sub {
+		$text->undo;
+		my $t = gettext;
+		return gettext; 
+	}, '', 'Undo Inserted text' ],
+	
+	$isnotmodified,
+
+	[ sub {
+		$text->redo;
+		return gettext; 
+	}, $original, 'Redo Inserted text' ],
+
+	$ismodified,
+	$init,
 
 	#testing indent line and undo redo
 	[ sub {
 		$text->markSet('insert', '1.0 lineend');
 		$text->indent;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $indentedline, 'Indented line' ],
+
+	$ismodified,
 
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Undo Iindented line' ],
+
+	$isnotmodified,
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $indentedline, 'Redo Idented line' ],
 
+
+	$ismodified,
 
 	#testing unindent line and undo redo
 	[ sub {
 		$text->unindent;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Unindented line' ],
 
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $indentedline, 'Undo Unindented line' ],
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Redo Unidented line' ],
 
 	#testing indent selection and undo redo
+	$init,
+	
 	[ sub {
 		$text->selectAll;
 		$text->indent;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $indentedsel, 'Indented selection' ],
 
+	$ismodified,
+	
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Undo Indented selection' ],
+
+	$isnotmodified,
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $indentedsel, 'Redo Idented selection' ],
 
+	$ismodified,
+	
 	#testing unindent selection and undo redo
 	[ sub {
 		$text->selectAll;
 		$text->unindent;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Unindented selection' ],
 
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $indentedsel, 'Undo Unindented selection' ],
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Redo Unidented selection' ],
 
 	#testing comment line 1 and undo redo
+	$init,
+
 	[ sub {
-		$text->unselectAll;
-		$text->SetCursor('0.0 lineend');
+		$text->SetCursor('1.0 lineend');
 		$text->comment;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentline1, 'Comment line 1' ],
+
+	$ismodified,
 
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Undo Comment line 1' ],
+
+	$isnotmodified,
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentline1, 'Redo Comment line 1' ],
+
+	$ismodified,
 
 	#testing uncomment line 1 and undo redo
 	[ sub {
 		$text->unselectAll;
 		$text->SetCursor('0.0 lineend');
 		$text->uncomment;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'UnComment line 1' ],
 
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentline1, 'Undo UnComment line 1' ],
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Redo UnComment line 1' ],
 
 	#testing comment selection 1 and undo redo
+	$init,
+
 	[ sub {
 		$text->selectAll;
 		$text->comment;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentsel1, 'Comment selection 1' ],
 
+	$ismodified,
+	
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Undo Comment selection 1' ],
+
+	$isnotmodified,
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentsel1, 'Redo Comment selection 1' ],
+
+	$ismodified,
 
 	#testing uncomment selection 1 and undo redo
 	[ sub {
 		$text->selectAll;
 		$text->uncomment;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'UnComment selection 1' ],
 
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentsel1, 'Undo UnComment selection 1' ],
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Redo UnComment selection 1' ],
 
 	#testing comment line 2 and undo redo
@@ -262,17 +384,17 @@ if (defined $app) {
 		$text->unselectAll;
 		$text->SetCursor('0.0 lineend');
 		$text->comment;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentline2, 'Comment line 2' ],
 
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Undo Comment line 2' ],
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentline2, 'Redo Comment line 2' ],
 
 	#testing uncomment line 2 and undo redo
@@ -280,58 +402,211 @@ if (defined $app) {
 		$text->unselectAll;
 		$text->SetCursor('0.0 lineend');
 		$text->uncomment;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'UnComment line 2' ],
 
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentline2, 'Undo UnComment line 2' ],
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Redo UnComment line 2' ],
 
 	#testing comment selection 2 and undo redo
 	[ sub {
 		$text->selectAll;
 		$text->comment;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentsel2, 'Comment selection 2' ],
 
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Undo Comment selection 2' ],
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentsel2, 'Redo Comment selection 2' ],
 
 	#testing comment selection 2 and undo redo
 	[ sub {
 		$text->selectAll;
 		$text->uncomment;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'UnComment selection 2' ],
 
 	[ sub {
 		$text->undo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $commentsel2, 'Undo UnComment selection 2' ],
 
 	[ sub {
 		$text->redo;
-		return $text->get('1.0', 'end - 1c'); 
+		return gettext; 
 	}, $original, 'Redo UnComment selection 2' ],
 
 	#emptying document
+	$reset,
+
+	#undo/redo buffer testing
 	[ sub {
-		$text->EmptyDocument;
-		return $text->get('1.0', 'end - 1c'); 
-	}, '', 'Reset widget' ],
+		enter($original);
+		return gettext; 
+	}, $original, 'Enter some original' ],
+
+	$ismodified,
+
+	[ sub {
+		$text->undo;
+		$text->undo;
+		return gettext;
+	}, $firstline, 'Undo x2, Simple undo' ],
+
+	$isnotmodified,
+
+	[ sub {
+		$text->redo;
+		$text->redo;
+		return gettext;
+	}, $original, 'Redo x2, Simple redo' ],
+
+	$ismodified,
+	#backspace key buffering 1
+
+	$init,
+
+	[ sub {
+		$text->goTo('end - 1c');
+		backspace(5);
+		return gettext;
+	}, $firstline, 'Backspace x5' ],
+
+	$ismodified,
+
+	[ sub {
+		$text->undo;
+		$text->undo;
+		return gettext;
+	}, $original, 'Undo x2, Backspace undo' ],
+
+	$isnotmodified,
+
+	[ sub {
+		$text->redo;
+		$text->redo;
+		return gettext;
+	}, $firstline, 'Redo x2, Backspace redo' ],
+
+	$ismodified,
+
+	#backspace key buffering 2
+	$init,
+
+	[ sub {
+		$text->goTo('1.3');
+		backspace(3);
+		return gettext;
+	}, $secondline, 'Backspace x 3 on first line' ],
+
+	[ sub {
+		$text->undo;
+		return gettext;
+	}, $original, 'Undo, Backspace line 1' ],
+
+	[ sub {
+		$text->redo;
+		return gettext;
+	}, $secondline, 'Redo, Backspace line 1' ],
+
+	#backspace key buffering 3
+	$init,
+
+	[ sub {
+		$text->goTo('2.0');
+		backspace(3);
+		return gettext;
+	}, $middleline, 'Backspace x 3 on beginning second line' ],
+
+	[ sub {
+		$text->undo;
+		return gettext;
+	}, $original, 'Undo, Backspace x 3 on beginning second line' ],
+
+	[ sub {
+		$text->redo;
+		return gettext;
+	}, $middleline, 'Redo, Backspace x 3 on beginning second line' ],
+
+	#delete buffer testing
+	$init,
+	
+	[ sub {
+		$text->goTo('1.3');
+		del(5);
+		return gettext;
+	}, $firstline, 'Delete x 5x 3 on end first line' ],
+
+	$ismodified,
+
+	[ sub {
+		$text->undo;
+		$text->undo;
+		return gettext;
+	}, $original, 'Undo, Delete x 5x 3 on end first line' ],
+
+	$isnotmodified,
+
+	[ sub {
+		$text->redo;
+		$text->redo;
+		return gettext;
+	}, $firstline, 'Redo, Delete x 5x 3 on end first line' ],
+
+	$ismodified,
+	$init,
+
+	[ sub {
+		$text->goTo('1.0');
+		del(3);
+		return gettext;
+	}, $secondline, 'Delete x 3 beginning first line' ],
+
+	[ sub {
+		$text->undo;
+		return gettext;
+	}, $original, 'Undo, Delete x 3 on beginning first line' ],
+
+	$init,
+
+	[ sub {
+		$text->OverstrikeMode(1);
+		$text->goTo('1.2');
+		enter('three');
+		return gettext;
+	}, "onthree\ntwo\n", 'OverstrikeMode' ],
+
+	$ismodified,
+
+	[ sub {
+		$text->undo;
+		return gettext;
+	}, $original, 'Undo, OverstrikeMode' ],
+
+	$isnotmodified,
+
+	[ sub {
+		$text->redo;
+		return gettext;
+	}, "onthree\ntwo\n", 'Redo, OverstrikeMode' ],
+
+	$ismodified,
+
+	#emptying document
+	$reset,
 );
 
 starttesting;

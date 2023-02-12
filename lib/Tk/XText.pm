@@ -62,8 +62,10 @@ sub Populate {
 
 	$self->{BUFFER} = '';
 	$self->{BUFFERMODE} = '';
+	$self->{BUFFERMODIFIED} = 0;
 	$self->{BUFFERSTART} = '1.0';
 	$self->{BUFFERREPLACE} = '';
+# 	$self->{UNDOREDOSIZES} = [0, 0];
 
 	$self->ResetRedo;
 	$self->ResetUndo;
@@ -106,6 +108,36 @@ sub Backspace {
 	}
 }
 
+sub Buffer {
+	my $self = shift;
+	$self->{BUFFER} = shift if @_;
+	return $self->{BUFFER}
+}
+
+sub BufferMode {
+	my $self = shift;
+	$self->{BUFFERMODE} = shift if @_;
+	return $self->{BUFFERMODE}
+}
+
+sub BufferModified {
+	my $self = shift;
+	$self->{BUFFERMODIFIED} = shift if @_;
+	return $self->{BUFFERMODIFIED}
+}
+
+sub BufferReplace {
+	my $self = shift;
+	$self->{BUFFERREPLACE} = shift if @_;
+	return $self->{BUFFERREPLACE}
+}
+
+sub BufferStart {
+	my $self = shift;
+	$self->{BUFFERSTART} = shift if @_;
+	return $self->{BUFFERSTART}
+}
+
 =item B<canUndo>
 
 =cut
@@ -133,6 +165,28 @@ sub ClassInit {
 	$mw->bind($class, '<<Undo>>','undo');
 	$mw->bind($class,'<<Redo>>','redo');
 	return $class->SUPER::ClassInit($mw);
+}
+
+=item B<clear>
+
+=cut
+
+sub clear {
+	my $self = shift;
+	$self->SUPER::delete('1.0', 'end');
+
+	$self->ResetRedo;
+	$self->ResetUndo;
+
+	$self->Buffer('');
+	$self->BufferMode('');
+	$self->BufferModified(0);
+	$self->BufferReplace('');
+	$self->BufferStart($self->index('insert'));
+	$self->editModified(0);
+	$self->OverstrikeMode(0);
+
+	$self->Callback('-modifycall', '1.0');
 }
 
 sub clipboardCut {
@@ -242,17 +296,7 @@ sub EditMenuItems {
 	];
 }
 
-sub EmptyDocument {
-	my $self = shift;
-	$self->SUPER::delete('1.0', 'end');
-	$self->ResetRedo;
-	$self->ResetUndo;
-	$self->{BUFFERSTART} = $self->index('insert');
-	$self->{BUFFER} = '';
-	$self->{BUFFERMODE} = '';
-	$self->editModified(0);
-	$self->Callback('-modifycall', '0.0');
-}
+sub EmptyDocument { $_[0]->clear }
 
 sub FindandReplaceAll {
 	my $self = shift;
@@ -261,22 +305,24 @@ sub FindandReplaceAll {
 
 sub Flush {
 	my $self = shift;
-	my $buf = $self->{BUFFER};
-	my $rbuf = $self->{BUFFERREPLACE};
+	my $buf = $self->Buffer;
+	my $rbuf = $self->BufferReplace;
 	if ($buf ne '') {
-		my $mode = $self->{BUFFERMODE};
-		my $start = $self->{BUFFERSTART};
+		my $mode = $self->BufferMode;
+		my $start = $self->BufferStart;
+		my $bmod = $self->BufferModified;
 		if ($mode eq 'backspace') {
-			$self->PushUndoRaw('delete', $start, $buf);
+			$self->PushUndoRaw('delete', $start, $buf, $bmod);
 		} elsif ($mode eq 'replace') {
-			$self->PushUndoRaw($mode, $start, $buf, $rbuf);
+			$self->PushUndoRaw($mode, $start, $buf, $rbuf, $bmod);
 		} else {
-			$self->PushUndoRaw($mode, $start, $buf);
+			$self->PushUndoRaw($mode, $start, $buf, $bmod);
 		}
-		$self->{BUFFER} = '';
-		$self->{BUFFERREPLACE} = '';
-		$self->{BUFFERMODE} = '';
-		$self->{BUFFERSTART} = $self->index('insert');
+		$self->Buffer('');
+		$self->BufferReplace('');
+		$self->BufferMode('');
+		$self->BufferModified($self->editModified);
+		$self->BufferStart($self->index('insert'));
 	}
 }
 
@@ -289,25 +335,41 @@ my %flushkeys = (
 sub FlushConditional {
 	my ($self, $pos, $key) = @_;
 	$pos = $self->index($pos);
-	my $mode = $self->{BUFFERMODE};
-	my $start = $self->{BUFFERSTART};
-	my $len = length($self->{BUFFER});
+	my $mode = $self->BufferMode;
+	my $start = $self->BufferStart;
+	my $len = length($self->Buffer);
 	my $icmoved = 0;
 	if ($mode eq 'backspace') {
-		$icmoved = ($start ne $pos)
+		$icmoved = ($start ne $pos);
 	} elsif ($mode eq 'delete') {
 		$icmoved = ($start ne $pos)
 	} elsif ($mode eq 'insert') {
 		$icmoved = ($self->index("$start + $len chars") ne $pos)
 	} elsif ($mode eq 'replace') {
+		$len = length($self->BufferReplace);
 		$icmoved = ($self->index("$start + $len chars") ne $pos)
 	}
 	if ((exists $flushkeys{$key}) or ($icmoved)) {
 		$self->Flush;
-		$self->{BUFFERMODE} = $mode;
+		$self->BufferMode($mode);
 		return 1
 	}
 	return 0
+}
+
+=item B<getFontInfo>
+
+=cut
+
+sub getFontInfo {
+	my $self = shift;
+	my $f = $self->cget('-font');
+	my %inf = ();
+	my @opt = qw(-family -size -weight -slant -underline -overstrike);
+	for (@opt) {
+		$inf{$_} = $self->fontActual($f, $_)
+	}
+	return \%inf
 }
 
 =item B<goTo>
@@ -352,14 +414,11 @@ sub InsertKeypress {
 	my $index = $self->index('insert');
 	if ($self->OverstrikeMode) {
 		my $current = $self->get('insert');
-		if ($current eq "\n") {
-			$self->Insert($char);
-		} else {
-			$self->RecordUndo('replace', $index, $current, $char);
-			$self->SUPER::delete($index);
-			$self->SUPER::insert($index, $char);
-			$self->Callback('-modifycall', $index);
-		}
+		$current = '' if $current eq "\n";
+		$self->RecordUndo('replace', $index, $current, $char);
+		$self->SUPER::delete($index) unless $current eq '';
+		$self->SUPER::insert($index, $char);
+		$self->Callback('-modifycall', $index);
 	} else {
 		$self->Insert($char);
 	}
@@ -480,39 +539,42 @@ sub PostPopupMenu {
 sub PullUndo {
 	my $self = shift;
 	my $stack = $self->{UNDOSTACK};
-	return pop(@$stack);
+	return shift(@$stack);
 }
 
 sub PullRedo {
 	my $self = shift;
 	my $stack = $self->{REDOSTACK};
-	return pop(@$stack);
+	return shift(@$stack);
 }
 
 sub PushUndo {
 	my $self = shift;
 	my $stack = $self->{UNDOSTACK};
-	push(@$stack, @_);
+	unshift(@$stack, @_);
 }
 
 sub PushUndoRaw {
-	my ($self, $mode, @content) = @_;
+	my ($self, $mode, @content, $modified) = @_;
 
 	my %undo = (
 		content => \@content,
 		mode => $mode,
-		modified => $self->editModified,
+		modified => $modified,
 	);
+
 	my @ranges = $self->tagRanges('sel');
 	$undo{'selection'} = \@ranges if (@ranges eq 2);
 	
+# 	$undo{'remod'} = 1 unless $modified;
+
 	$self->PushUndo(\%undo);
 }
 
 sub PushRedo {
 	my $self = shift;
 	my $stack = $self->{REDOSTACK};
-	push(@$stack, @_);
+	unshift(@$stack, @_);
 }
 
 sub RecordUndo {
@@ -520,26 +582,27 @@ sub RecordUndo {
 
 	$self->ResetRedo;
 
-	my $bufmode = $self->{BUFFERMODE};
-	$self->{BUFFERMODE} = $mode if $bufmode eq '';
-	$self->Flush if $mode ne $self->{BUFFERMODE};
-
 	if ($mode eq 'backspace') {
 		if ($self->selectionExists) {
 			$self->Flush;
 			my @ranges = $self->tagRanges('sel');
 			my $text = $self->get(@ranges);
-			$self->PushUndoRaw('delete', $ranges[0], $text);
+			$self->PushUndoRaw('delete', $ranges[0], $text, $self->editModified);
 		} else {
+			my $bufmode = $self->BufferMode;
+			$self->BufferMode($mode) if $bufmode eq '';
+			$self->Flush if $mode ne $self->BufferMode;
+
+
 			my $end = $self->index('insert');
 			my $begin = $self->index("$end - 1c");
 			my $char = $self->get($begin, $end);
 			if ($char ne '') {
 				$self->FlushConditional($end, $char);
-				my $buf = $self->{BUFFER};
+				my $buf = $self->Buffer;
 				$buf = "$char$buf";
-				$self->{BUFFER} = $buf;
-				$self->{BUFFERSTART} = $begin;
+				$self->Buffer($buf);
+				$self->BufferStart($begin);
 			}
 		}
 	} elsif (($mode eq 'delete') or ($mode eq 'insert')) {
@@ -548,28 +611,37 @@ sub RecordUndo {
 
 		if (length($text) > 1) {
 			$self->Flush;
-			$self->PushUndoRaw($mode, $pos, $text);
+			$self->PushUndoRaw($mode, $pos, $text, $self->editModified);
 		} else {
-			$self->{BUFFERSTART} = $pos if $self->FlushConditional($pos, $text);
-			my $buf = $self->{BUFFER};
+			my $bufmode = $self->BufferMode;
+			$self->BufferMode($mode) if $bufmode eq '';
+			$self->Flush if $mode ne $self->BufferMode;
+
+
+			$self->BufferStart($pos) if $self->FlushConditional($pos, $text);
+			my $buf = $self->Buffer;
 			$buf = "$buf$text";
-			$self->{BUFFER} = $buf;
+			$self->Buffer($buf);
 		}
 	} elsif ($mode eq 'replace') {
 		my ($pos, $old, $new) = @content;
 		$pos = $self->index($pos);
 
-		if (length($old) > 1) {
+		if (length($new) > 1) {
 			$self->Flush;
-			$self->PushUndoRaw($mode, $pos, $old, $new);
+			$self->PushUndoRaw($mode, $pos, $old, $new, $self->editModified);
 		} else {
-			$self->{BUFFERSTART} = $pos if $self->FlushConditional($pos, $new);
-			my $buf = $self->{BUFFER};
-			my $rbuf = $self->{BUFFERREPLACE};
+			my $bufmode = $self->BufferMode;
+			$self->BufferMode($mode) if $bufmode eq '';
+			$self->Flush if $mode ne $self->BufferMode;
+
+			$self->BufferStart($pos) if $self->FlushConditional($pos, $new);
+			my $buf = $self->Buffer;
+			my $rbuf = $self->BufferReplace;
 			$buf = "$buf$old";
 			$rbuf = "$rbuf$new";
-			$self->{BUFFER} = $buf;
-			$self->{BUFFERREPLACE} = $rbuf;
+			$self->Buffer($buf);
+			$self->BufferReplace($rbuf);
 		}
 	}
 }
@@ -608,7 +680,7 @@ sub redo {
 		} else {
 			carp "invalid redo mode $mode, should be 'delete', 'insert', or 'replace'\n";
 		}
-		$self->editModified($o->{'modified'});
+# 		$self->editModified($o->{'redomod'});
 		if (my $sel = $o->{'selection'}) {
 			$self->unselectAll;
 			$self->tagAdd('sel',@$sel);
@@ -617,6 +689,12 @@ sub redo {
 		$self->Callback('-modifycall', $pos);
 	}
 }
+
+# sub RedoStackSize {
+# 	my $stack = $_[0]->{REDOSTACK};
+# 	my $size = @$stack;
+# 	return $size;
+# }
 
 sub ReplaceSelectionsWith {
 	my ($self,$new_text ) = @_;
@@ -740,7 +818,7 @@ sub uncomment {
 			$self->SUPER::delete('insert linestart', "insert linestart + $lstart chars");
 			$self->SUPER::delete( "insert lineend - $lend chars", 'insert lineend');
 		} elsif ($old =~ /^$start/) {
-			$self->delete('insert linestart', "insert linestart + $lstart chars");
+			$self->SUPER::delete('insert linestart', "insert linestart + $lstart chars");
 		}
 		my $new = $self->get($rb, "$rb lineend");
 		$self->RecordUndo('replace', $rb, $old, $new)
@@ -792,6 +870,18 @@ sub undo {
 		$self->Callback('-modifycall', $pos);
 	}
 }
+
+# sub UndoRedoSizes {
+# 	my $self = shift;
+# 	$self->{UNDOREDOSIZES} = shift if @_;
+# 	return $self->{UNDOREDOSIZES}
+# }
+# 
+# sub UndoStackSize {
+# 	my $stack = $_[0]->{UNDOSTACK};
+# 	my $size = @$stack;
+# 	return $size;
+# }
 
 =item B<unindent>
 
