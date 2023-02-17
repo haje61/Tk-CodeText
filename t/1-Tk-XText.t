@@ -1,7 +1,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 111;
+use Test::More tests => 139;
 use Test::Tk;
 use Tk;
 
@@ -580,6 +580,7 @@ push @tests, (
 		return gettext;
 	}, $original, 'Undo, Delete x 3 on beginning first line' ],
 
+	#overstrike testing
 	$init,
 
 	[ sub {
@@ -605,6 +606,106 @@ push @tests, (
 
 	$ismodified,
 
+	#selection replace testing
+	$init,
+	
+	[ sub {
+		$text->selectAll;
+		$text->ReplaceSelectionsWith("three\n");
+		return gettext;
+	}, "three\n", 'Replace selection' ],
+
+	$ismodified,
+
+	[ sub {
+		$text->undo;
+		return gettext;
+	}, $original, 'Undo, Replace selection' ],
+
+	$isnotmodified,
+
+	[ sub {
+		$text->redo;
+		return gettext;
+	}, "three\n", 'Redo, Replace selection' ],
+
+	$ismodified,
+	
+	#delete selection
+	$init,
+
+	[ sub {
+		$text->selectAll;
+		del;
+		return gettext;
+	}, "", 'Delete selection' ],
+
+	$ismodified,
+
+	[ sub {
+		$text->undo;
+		return gettext;
+	}, $original, 'Undo, Delete selection' ],
+
+	$isnotmodified,
+
+	[ sub {
+		$text->redo;
+		return gettext;
+	}, "", 'Redo, Delete selection' ],
+
+	$ismodified,
+	
+	#backspace selection
+	$init,
+
+	[ sub {
+		$text->selectAll;
+		backspace;
+		return gettext;
+	}, "", 'Backspace selection' ],
+
+	$ismodified,
+
+	[ sub {
+		$text->undo;
+		return gettext;
+	}, $original, 'Undo, Backspace selection' ],
+
+	$isnotmodified,
+
+	[ sub {
+		$text->redo;
+		return gettext;
+	}, "", 'Redo, Backspace selection' ],
+
+	$ismodified,
+	
+	#key a selection
+	$init,
+
+	[ sub {
+		$text->selectAll;
+		enter('a');
+		return gettext;
+	}, "a", 'Key a selection' ],
+
+	$ismodified,
+
+	[ sub {
+		$text->undo;
+		return gettext;
+	}, $original, 'Undo, Key a selection' ],
+
+	$isnotmodified,
+
+	[ sub {
+		$text->redo;
+		return gettext;
+	}, "a", 'Redo, Key a selection' ],
+
+	$ismodified,
+	
 	#emptying document
 	$reset,
 );

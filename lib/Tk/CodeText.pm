@@ -1,5 +1,4 @@
 package MyKamelon;
-
 use strict;
 use warnings;
 
@@ -7,28 +6,23 @@ use base qw(Syntax::Kamelon);
 
 sub new {
 	my $class = shift;
-	my %args = (@_);
-
-	my $widget = delete $args{widget};
-   my $self = $class->SUPER::new(%args);
-   $self->{WIDGET} = $widget;
+	my $widget = shift;
+	my $self = $class->SUPER::new(@_);
+	$self->{WIDGET} = $widget;
 	return $self
 }
 
-# TODO
-sub ParseResultBeginRegion {
+sub LineNumber {
 	my $self = shift;
-	my $region = pop @_;
-# 	$self->{FORMATTER}->FoldBegin($region);
-	my $parser = pop @_;
-	return &$parser($self, @_);
+	$self->{LINENUMBER} = shift if @_;
+	return $self->{LINENUMBER}
 }
 
-# TODO
 sub ParseResultEndRegion {
 	my $self = shift;
 	my $region = pop @_;
-# 	$self->{FORMATTER}->FoldEnd($region);
+	$self->Formatter->FoldEnd($region);
+	$self->Widget->foldsCheck;
 	my $parser = pop @_;
 	return &$parser($self, @_);
 }
@@ -38,6 +32,14 @@ sub Widget { return $_[0]->{WIDGET} }
 ###########################################################################
 
 package Tk::CodeText;
+
+
+=head1 NAME
+
+Tk:XText - Extended Text widget
+
+=cut
+
 
 use strict;
 use warnings;
@@ -60,7 +62,7 @@ my @defaultattributes = (
 	['BaseN', -foreground => 'darkgreen'],
 	['BuiltIn', -foreground => 'purple'],
 	['Char', -foreground => 'magenta'],
-	['Comment', -font => [-slant => 'italic']],
+	['Comment', foreground => 'darkgrey', -font => [-slant => 'italic']],
 	['CommentVar', -foreground => 'darkgrey', -font => [-slant => 'italic']],
 	['Constant', -foreground => 'blue', -font => [-weight => 'bold']],
 	['ControlFlow', -foreground => 'darkblue'],
@@ -113,6 +115,60 @@ static char *save[]={
 "................"};
 ';
 
+my $minusimg = '#define indicatorclose_width 11
+#define indicatorclose_height 11
+static unsigned char indicatorclose_bits[] = {
+   0xff, 0x07, 0x01, 0x04, 0x01, 0x04, 0x01, 0x04, 0x01, 0x04, 0xfd, 0x05,
+   0x01, 0x04, 0x01, 0x04, 0x01, 0x04, 0x01, 0x04, 0xff, 0x07 };
+';
+
+my $plusimg = '#define indicatoropen_width 11
+#define indicatoropen_height 11
+static unsigned char indicatoropen_bits[] = {
+   0xff, 0x07, 0x01, 0x04, 0x21, 0x04, 0x21, 0x04, 0x21, 0x04, 0xfd, 0x05,
+   0x21, 0x04, 0x21, 0x04, 0x21, 0x04, 0x01, 0x04, 0xff, 0x07 };
+';
+
+
+=head1 SYNOPSIS
+
+ require Tk::XText;
+ my $text= $window->XText(@options)->pack;
+
+=head1 DESCRIPTION
+
+=head1 OPTIONS
+
+=over 4
+
+=item Switch: B<-autoindent>
+
+=item Switch: B<-commentend>
+
+=item Switch: B<-commentstart>
+
+=item Switch: B<-disablemenu>
+
+=item Switch: B<-indentchar>
+
+=item Switch: B<-match>
+
+=item Switch: B<-matchoptions>
+
+=item Switch: B<-modifycall>
+
+=item Switch: B<-updatecall>
+
+=back
+
+=cut
+
+=head1 METHODS
+
+=over 4
+
+=cut
+
 sub Populate {
 	my ($self,$args) = @_;
 
@@ -123,13 +179,20 @@ sub Populate {
 
 	$self->{COLORINF} = [];
 	$self->{COLORED} = 1;
-	$self->{KAMELON} = Syntax::Kamelon->new(
-# 		widget => $self,
-#		syntax => 'Perl',
+	$self->{FOLDBUTTONS} = {};
+	$self->{FOLDINF} = [];
+	$self->{FOLDSVISIBLE} = 0;
+	$self->{KAMELON} = MyKamelon->new($self,
+		formatter => ['Base',
+			foldingdepth => 'all',
+		],
 	);
 	$self->{HIGHLIGHTINTERVAL} = 1;
 	$self->{LOOPACTIVE} = 0;
 	$self->{NOHIGHLIGHTING} = 1;
+	$self->{NUMBERSVISIBLE} = 0;
+	$self->{NUMBERINF} = [];
+	$self->{STATUSVISIBLE} = 0;
 	
 	#create editor frame
 	my $ef = $self->Frame(
@@ -143,20 +206,19 @@ sub Populate {
 	#create the frame for the line numbers
 	my $numbers = $ef->Frame(
 		-width => 40,
-	)->pack(-side => 'left', -fill => 'y');
+	);
 
 	#create the frame for code folding
 	my $folds = $ef->Frame(
-		-width => 10,
-	)->pack(-side => 'left', -fill => 'y');
+		-width => 18,
+	);
 
 	#create the textwidget
 	my $text = $ef->Scrolled('XText',
 		-relief => 'flat',
-		-modifycall => ['highlightCheck', $self],
+		-modifycall => ['modifiedCheck', $self],
 		-scrollbars => 'osoe',
 	)->pack(-side => 'left', -expand =>1, -fill => 'both');
-	$self->Advertise(XText => $text);
 
 	#create the statusbar
 	my $pos = '';
@@ -164,11 +226,7 @@ sub Populate {
 	my $size = '';
 	my $ovr = '';
 
-	my $sb = $self->Frame->pack(
-		-padx => 2,
-		-pady => 2,
-		-fill => 'x'
-	);
+	my $sb = $self->Frame;
 
 	my $modlab = $sb->Label(
 		-image => $saveimage,
@@ -202,11 +260,6 @@ sub Populate {
 		-width => 11, 
 		-relief => 'groove'
 	)->pack(-side => 'left', -pady => 2);
-	$sb->Button(
-		-text=> 'Reset',
-		-relief => 'flat',
-		-command => ['clear', $text], 
-	)->pack(-side => 'left');
 
 	my $call;
 	$call = sub {
@@ -228,8 +281,17 @@ sub Populate {
 		}
 		$self->after(200, $call);
 	};
-	
-	$self->after(5000, $call);
+	$self->after(200, $call);
+
+	$self->Advertise(XText => $text);
+	$self->Advertise(Numbers => $numbers);
+	$self->Advertise(Folds => $folds);
+	$self->Advertise(Statusbar => $sb);
+
+	# hack for getting proper bitmap foreground
+	my $l = $self->Label;
+	my $fg = $l->cget('-foreground');
+	$l->destroy;
 
 	$self->ConfigSpecs(
 		-attributes => [qw/METHOD attributes Attributes/,  \@defaultattributes],
@@ -237,14 +299,56 @@ sub Populate {
 		-commentchar => '-commentstart', #depricated
 		-configdir => [qw/PASSIVE configdir ConfigDir/, ''],
 		-highlightinterval => [qw/METHOD highlightinterval HighlightInterval/, 1],
+		-minusimg => ['PASSIVE', undef, undef, $self->Bitmap(
+			-data => $minusimg,
+			-foreground => $fg,
+		)],
+		-plusimg => ['PASSIVE', undef, undef, $self->Bitmap(
+			-data => $plusimg,
+			-foreground => $fg,
+		)],
 		-rules => '-attributes', #depricated
 		-rulesdir => '-configdir', #depricated
+		-showfolds => [qw/METHOD showFolds ShowFolds/, 1],
+		-shownumbers => [qw/METHOD showNumers ShowNumbers/, 1],
+		-showstatus => [qw/METHOD showStatus ShowStatus/, 1],
 		-syntax => [qw/METHOD syntax Syntax/, 'None'],
 		DEFAULT => [ $text ],
 	);
+
 	$self->Delegates(
-		DEFAULT => [ $text ],
+		DEFAULT => $text,
 	);
+
+	$self->tagConfigure('Hidden', -elide => 1);
+
+	my $yscroll = $text->Subwidget('yscrollbar');
+	my $scrollcommand = $yscroll->cget( -command );
+	$yscroll->configure(
+		-command => sub {
+			$scrollcommand->Call(@_);
+			$self->contentCheck;
+		}
+	);
+
+	my @events = qw(
+		Expose Visibility Configure
+		KeyPress ButtonPress ButtonRelease-1 
+		Return ButtonRelease-2 B2-Motion 
+		B1-Motion MouseWheel
+	);
+	foreach my $event (@events) {
+		my $bindsub = $text->bind("<$event>");
+		if ($bindsub) {
+			$text->bind("<$event>", sub {
+				$bindsub->Call;
+				$self->contentCheck;
+			});
+		} else {
+			$text->bind( "<$event>", sub { $self->contentCheck } );
+		}
+	}
+ 	$self->after(1, [lnumberCheck => $self]);
 }
 
 sub attributes {
@@ -254,7 +358,7 @@ sub attributes {
 		#the ->after is necessary here, at create time the widget would not yet return the
 		#correct font information to configure the attributes correctly.
 		#TODO: find a solution for this.
-		$self->after(5, ['attributesConfigure', $self]);
+		$self->after(1, ['attributesConfigure', $self]);
 		
 	}
 	return $self->{ATTRIBUTES};
@@ -263,13 +367,17 @@ sub attributes {
 sub attributesConfigure {
 	my $self = shift;
 	my $new = $self->{ATTRIBUTES};
+
 	my @tags = $self->tags;
+	#clear all tags
 	for (@tags) {
-		$self->Subwidget('XText')->tagDelete($_)
+		$self->tagDelete($_)
 	}
+	#setup attributes
 	foreach my $r (@$new) {
 		my @raw = @$r;
 		my $tagname = shift @raw;
+		#check for valid tagname
 		my $hit = grep({ $_ eq $tagname} @tags);
 		if ($hit) {
 			my %opt = (@raw);
@@ -277,7 +385,7 @@ sub attributesConfigure {
 				my $f = $opt{'-font'};
 				$opt{'-font'} = $self->attributesFontCompose($f);
 			}
-			$self->Subwidget('XText')->tagConfigure($tagname, %opt);
+			$self->tagConfigure($tagname, %opt);
 		}
 	}
 }
@@ -296,6 +404,12 @@ sub attributesFontCompose {
 	return \@res;
 }
 
+sub clear {
+	my $self = shift;
+	$self->Kamelon->Reset;
+	$self->Subwidget('XText')->clear;
+}
+
 sub Colored {
 	my $self = shift;
 	$self->{COLORED} = shift if @_;
@@ -308,10 +422,174 @@ sub ColorInf {
 	return $self->{COLORINF}
 }
 
+sub contentCheck {
+	my $self = shift;
+	$self->lnumberCheck;
+	$self->foldsCheck;
+}
+
+sub foldButton {
+	my ($self, $line) = @_;
+	my $folds = $self->Kamelon->Formatter->Folds;
+	my $fbuttons = $self->FoldButtons;
+	unless (exists $fbuttons->{$line}) {
+	
+		my $data = $folds->{$line};
+# 		my $last = $data->{'end'} - 1;
+
+		my @opt = ();
+		my $state;
+		if ($self->isHidden($line + 1)) {
+			push @opt, -image => $self->cget('-plusimg');
+			$state = 'collapsed';
+		} else {
+			push @opt, -image => $self->cget('-minusimg');
+			$state = 'expanded';
+		}
+		my $b = $self->Subwidget('Folds')->Button(@opt,
+			-command => ['foldFlip', $self, $line],
+			-relief => 'flat',
+		);
+		$fbuttons->{$line} = {
+			button => $b,
+			data => $data,
+			state => $state,
+		};
+	}
+	return $fbuttons->{$line};
+}
+
+sub FoldButtons {
+	my $self = shift;
+	$self->{FOLDBUTTONS} = shift if @_;
+	return $self->{FOLDBUTTONS}
+}
+
+sub foldCollapse {
+	my ($self, $line) = @_;
+	my $data = $self->FoldButtons->{$line};
+	$data->{'state'} = 'collapsed';
+	$data->{'button'}->configure(-image => $self->cget('-plusimg'));
+	my $end = $data->{'data'}->{'end'};
+	$line ++;
+	while ($line < $end) {
+		$self->hideLine($line);
+		$line ++;
+	}
+	$self->lnumberCheck;
+	$self->foldsCheck;
+}
+
+sub foldCollapseAll {
+	my $self = shift;
+	my $folds = $self->Kamelon->Formatter->Folds;
+	for (sort keys %$folds) {
+		$self->foldButton($_); #just make sure a fold button exists
+		$self->foldCollapse($_);
+	}
+}
+
+sub foldExpand {
+	my ($self, $line) = @_;
+	my $data = $self->FoldButtons->{$line};
+	$data->{'state'} = 'expanded';
+	$data->{'button'}->configure(-image => $self->cget('-minusimg'));
+	$self->lnumberCheck;
+	my $end = $data->{'data'}->{'end'};
+	$line ++;
+	while ($line < $end) {
+		$self->showLine($line);
+		my $nested = $self->FoldButtons->{$line};
+		if (defined $nested) {
+			$self->foldExpand($line) unless ($nested->{'state'} eq 'collapsed');
+			$line = $nested->{'data'}->{'end'};
+			$self->showLine($line);
+		} else {
+			$line ++
+		}
+	}
+	$self->foldsCheck;
+}
+
+sub foldExpandAll {
+	my $self = shift;
+	my $folds = $self->Kamelon->Formatter->Folds;
+	for (sort keys %$folds) {
+		$self->foldButton($_); #just make sure a fold button exists
+		$self->foldExpand($_);
+	}
+}
+
+sub foldFlip {
+	my ($self, $line) = @_;
+	my $data = $self->FoldButtons->{$line};
+	if ($data->{'state'} eq 'collapsed') {
+		$self->foldExpand($line);
+	} elsif ($data->{'state'} eq 'expanded') {
+		$self->foldCollapse($line);
+	}
+}
+
+sub FoldInf {
+	my $self = shift;
+	$self->{FOLDINF} = shift if @_;
+	return $self->{FOLDINF}
+}
+
+sub foldsCheck {
+	my $self = shift;
+	my $folds = $self->Kamelon->Formatter->Folds;
+	my $inf = $self->FoldInf;
+	my $fframe = $self->Subwidget('Folds');
+	my $line = $self->visualbegin;
+	my $last = $self->visualend;
+	my $fbuttons = $self->FoldButtons;
+
+	#clear out currently mapped fold keys
+	$self->foldsClear;
+
+	my $count = 0;
+	while ($line <= $last) {
+		while ($self->isHidden($line)) { $line ++ }
+		if (exists $folds->{$line}) {
+			#vertical alignment with the line
+			my ( $x, $y, $wi, $he ) = $self->dlineinfo("$line.0");
+			my $but = $self->foldButton($line)->{'button'};
+			my $bh = $but->reqheight;
+			my $delta = int(($he - $bh) / 2);
+			$but->place(-x => 0, -y => $y + $delta);
+			$inf->[$count] = $but;
+		}
+		$count ++;
+		$line ++;
+	}
+	while (@$inf >= $count) {
+		pop @$inf;
+	}
+}
+
+sub foldsClear {
+	my $self = shift;
+	my $inf = $self->FoldInf;
+	my $count = 0;
+	for (@$inf) { 
+		if (defined $_) {
+			$_->placeForget;
+			$inf->[$count] = undef;
+		};
+		$count ++;
+	}
+}
+
+sub hideLine {
+	my ($self, $line) = @_;
+	$self->tagAdd('Hidden', "$line.0", "$line.0 lineend + 1c");
+}
+
 sub highlightCheck {
 	my ($self, $pos) = @_;
 	return if $self->NoHighlighting;
-	my $line = $self->Subwidget('XText')->linenumber($pos);
+	my $line = $self->linenumber($pos);
 	$self->highlightPurge($line);
 }
 
@@ -324,6 +602,7 @@ sub highlightinterval {
 sub highlightLine {
 	my ($self, $num) = @_;
 	my $kam = $self->Kamelon;
+	$kam->LineNumber($num);
 	my $xt = $self->Subwidget('XText');
 	my $begin = "$num.0"; my $end = $xt->index("$num.0 lineend + 1c");
 #	remove all existing tags in this line
@@ -355,30 +634,104 @@ sub highlightLoop {
 	my $xt = $self->Subwidget('XText');
 	if ($colored <= $xt->linenumber('end - 1c')) {
 		$self->LoopActive(1);
-#		print " doing line $colored\n";
 		$self->highlightLine($colored);
 		$colored ++;
 		$self->Colored($colored);
-# 		my $int = $self->cget('-highlightinterval');
 		$self->after($self->highlightinterval, ['highlightLoop', $self]);
 	} else {
 		$self->LoopActive(0);
-#		print " stopping\n";
 	}
 }
 
 sub highlightPurge {
 	my ($self, $line) = @_;
 	if ($line <= $self->Colored) {
+
+		#purge highlightinfo
 		$self->Colored($line);
 		my $cli = $self->ColorInf;
 		if (@$cli) { splice(@$cli, $line) };
 		$self->highlightLoop unless $self->LoopActive;
+		
+		#purge folds
+		$self->foldsClear;
+		my $folds = $self->Kamelon->Formatter->Folds;
+		for (keys %$folds) {
+			delete $folds->{$_} if $_ >= $line
+		}
+		#clear out unused fold buttons
+		my $btns = $self->FoldButtons;
+		for (keys %$btns) {
+			unless (exists $folds->{$_}) {
+				my $b = delete $btns->{$_};
+				$b->{'button'}->destroy;
+			}
+		}
 	}
+}
+
+sub isHidden {
+	my ($self, $line) = @_;
+	my @names = $self->tagNames("$line.0");
+	my $hit = grep({ $_ eq 'Hidden'} @names);
+	return $hit;
 }
 
 sub Kamelon {
 	return $_[0]->{KAMELON}
+}
+
+=item B<lnumberCheck>
+
+=cut
+
+sub lnumberCheck {
+	my $self = shift;
+
+	my $widget = $self->Subwidget('XText');
+	my $count = 0;
+
+	my $line = $self->visualbegin;
+	my $last = $self->visualend;
+
+	my $nimf = $self->{NUMBERINF};
+	my $numframe = $self->Subwidget('Numbers');
+
+	while ($line <= $last) {
+		while ($self->isHidden($line)) { $line ++ }
+		my ( $x, $y, $wi, $he ) = $self->dlineinfo("$line.0");
+
+		#create a number label if it does not yet exist;
+		unless (defined $nimf->[$count]) {
+			my $l = $numframe->Label(
+				-justify => 'right',
+				-anchor => 'ne',
+				-font => $widget->cget('-font'),
+				-borderwidth => 0,
+			);
+			push @$nimf, $l;
+		}
+
+		#configure and position the number label
+		my $lab = $nimf->[$count];
+		$lab->configure(
+			-text => $line,
+			-width => length($last),
+		);
+		$lab->placeForget if $lab->ismapped;
+		$lab->place(-x => 0, -y => $y);
+		$line ++;
+		$count ++;
+	}
+
+	my $numwidth = $nimf->[$count - 1]->reqwidth;
+	$numframe->configure(-width => $numwidth);
+
+	while (defined $nimf->[$count]) {
+		my $l = pop @$nimf;
+		$l->placeForget;
+		$l->destroy;
+	}
 }
 
 sub LoopActive {
@@ -387,11 +740,82 @@ sub LoopActive {
 	return $self->{LOOPACTIVE}
 }
 
+sub modifiedCheck {
+	my ($self, $index) = @_;
+	$self->highlightCheck($index);
+# 	$self->lnumberCheck;
+}
+
 sub NoHighlighting {
 	my $self = shift;
 	$self->{NOHIGHLIGHTING} = shift if @_;
 	return $self->{NOHIGHLIGHTING}
 }
+
+sub showfolds {
+	my ($self, $flag) = @_;
+	my $f = $self->Subwidget('Folds');
+	if (defined $flag) {
+		if ($flag) {
+			my $before = $self->Subwidget('XText');
+			$f->pack(
+				-side => 'left',
+				-before => $before,
+				-fill => 'y',
+			);
+			$self->{FOLDSVISIBLE} = 1;
+		} else {
+			$self->{FOLDSVISIBLE} = 0;
+			$f->packForget;
+		}
+	}
+	return $self->{FOLDSVISIBLE}
+}
+
+sub showLine {
+	my ($self, $line) = @_;
+	$self->tagRemove('Hidden', "$line.0", "$line.0 lineend + 1c");
+}
+
+sub shownumbers {
+	my ($self, $flag) = @_;
+	my $f = $self->Subwidget('Numbers');
+	if (defined $flag) {
+		if ($flag) {
+			my $before = $self->Subwidget('XText');
+			my $folds = $self->Subwidget('Folds');
+			$before = $folds if $folds->ismapped;
+			$f->pack(
+				-side => 'left',
+				-before => $before,
+				-fill => 'y',
+			);
+			$self->{NUMBERSVISIBLE} = 1;
+		} else {
+			$f->packForget;
+			$self->{NUMBERSVISIBLE} = 0;
+		}
+	}
+	return $self->{NUMBERSVISIBLE}
+}
+
+sub showstatus {
+	my ($self, $flag) = @_;
+	my $f = $self->Subwidget('Statusbar');
+	if (defined $flag) {
+		if ($flag) {
+			$f->pack(
+				-fill => 'x',
+			);
+			$self->{STATUSVISIBLE} = 1;
+		} else {
+			$f->packForget;
+			$self->{STATUSVISIBLE} = 0;
+		}
+	}
+	return $self->{STATUSVISIBLE};
+}
+
 
 sub syntax {
 	my ($self, $new) = @_;
@@ -400,7 +824,6 @@ sub syntax {
 		if ($new eq 'None') {
 			$self->NoHighlighting(1);
 		} else {
-			print "syntax\n";
 			$kam->Syntax($new);
 			$self->NoHighlighting(0);
 			$self->Colored(1);
@@ -415,6 +838,62 @@ sub syntax {
 sub tags {
 	return $_[0]->Kamelon->AvailableAttributes
 }
+
+sub ViewMenuItems {
+	my $self = shift;
+
+	my $f;
+	tie $f, 'Tk::Configure', $self, '-showfolds';
+	my $n;
+	tie $n, 'Tk::Configure', $self, '-shownumbers';
+	my $s;
+	tie $s, 'Tk::Configure', $self, '-showstatus';
+
+	my @values = (-onvalue => 1, -offvalue => 0);
+	my $items = $self->Subwidget('XText')->ViewMenuItems;
+	push @$items,
+		'separator',
+		[checkbutton => "Show code folds", @values, -variable => \$f],
+		[checkbutton => "Show line numbers", @values, -variable => \$n],
+		[checkbutton => "Show status bar", @values, -variable => \$s];
+	return $items
+}
+
+=back
+
+=head1 AUTHOR
+
+=over 4
+
+=item Hans Jeuken (hanje at cpan dot org)
+
+=back
+
+=cut
+
+=head1 BUGS
+
+Unknown. If you find any, please contact the author.
+
+=cut
+
+=head1 TODO
+
+=over 4
+
+
+=back
+
+=cut
+
+=head1 SEE ALSO
+
+=over 4
+
+
+=back
+
+=cut
 
 1;
 

@@ -8,6 +8,7 @@ my $ld = '$(INST_LIBDIR)';
 WriteMakefile(
 	NAME => "Tk::$pm",
 	PREREQ_PM => {
+		'Math::Round' => 0,
 		'Syntax::Kamelon' => '0.20',
 		'Test::Tk' => '2.00',
 		'Tk' => '800.024',

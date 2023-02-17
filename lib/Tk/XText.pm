@@ -13,6 +13,7 @@ use warnings;
 use Carp;
 
 use Tk;
+use Math::Round;
 
 use base qw(Tk::Derived Tk::Text);
 Construct Tk::Widget 'XText';
@@ -81,6 +82,7 @@ sub Populate {
 		-matchoptions	=> ['METHOD', undef, undef, [-background => 'red', -foreground => 'yellow']],
 		-modifycall => ['CALLBACK', undef, undef, sub {}],
 		-updatecall => ['CALLBACK', undef, undef, sub {}],
+		-updatelines => ['PASSIVE', undef, undef, 100],
 		DEFAULT => [ 'SELF' ],
 	);
 	$self->eventAdd('<<Indent>>', '<Control-j>');
@@ -89,7 +91,6 @@ sub Populate {
 	$self->eventAdd('<<UnComment>>', '<Control-G>');
 	$self->eventAdd('<<Undo>>', '<Control-z>');
 	$self->eventAdd('<<Redo>>', '<Control-Z>');
-	$self->bind('<Return>', 'doAutoIndent' );
 	$self->bind('<Control-Tab>', 'UnIndent' );
 	$self->bind('<KeyRelease>', 'matchCheck');
 	$self->bind('<Control-a>', 'selectAll');
@@ -164,6 +165,7 @@ sub ClassInit {
 	$mw->bind($class,'<<UnIndent>>','unindent');
 	$mw->bind($class, '<<Undo>>','undo');
 	$mw->bind($class,'<<Redo>>','redo');
+	$mw->bind($class, '<Return>', 'doAutoIndent', );
 	return $class->SUPER::ClassInit($mw);
 }
 
@@ -187,41 +189,6 @@ sub clear {
 	$self->OverstrikeMode(0);
 
 	$self->Callback('-modifycall', '1.0');
-}
-
-sub clipboardCut {
-	my $self = shift;
-	if ($self->selectionExists) {
-		my ($begin , $end) = $self->tagRanges('sel');
-		my $text = $self->get($begin, $end);
-		$self->RecordUndo('delete', $begin, $text);
-		$self->SUPER::clipboardCut(@_);
-	}
-}
-
-# TODO
-sub clipboardColumnCut {
-	my $self = shift;
-	return $self->SUPER::clipboardColumnCut(@_);
-}
-
-sub clipboardPaste {
-	my $self = shift;
-	my $new = $self->clipboardGet;
-	if ($self->selectionExists) {
-		my ($begin , $end) = $self->tagRanges('sel');
-		my $text = $self->get($begin, $end);
-		$self->RecordUndo('replace', $begin, $text, $new);
-	} else {
-		$self->RecordUndo('insert', $self->index('insert'), $new);
-	}
-	$self->SUPER::clipboardPaste(@_);
-}
-
-# TODO
-sub clipboardColumnPaste {
-	my $self = shift;
-	return $self->SUPER::clipboardColumnPaste(@_);
 }
 
 =item B<comment>
@@ -443,6 +410,40 @@ sub linenumber {
 	my $id = $self->index($index);
 	my ($line, $pos ) = split(/\./, $id);
 	return $line;
+}
+
+=item B<load>
+
+=cut
+
+sub load {
+	my ($self, $file) = @_;
+
+	unless (open INFILE, '<', $file) { 
+		warn "cannot open $file";
+		return 0
+	};
+	my $size = -s $file;
+	my $loaded = 0;
+	my $count = 0;
+	my $thresh = $self->cget('-updatelines');
+	$self->clear;
+	while (my $line = <INFILE>) {
+		$self->SUPER::insert('end', $line);
+		$loaded = $loaded + length($line);
+		$count ++;
+		if ($count >= $thresh) {
+			my $perc = int(($loaded / $size) * 100);
+			$self->Callback('-updatecall', $perc);
+			$count = 0;
+		}
+	}
+	$self->Callback('-updatecall', 100);
+	close INFILE;
+	$self->goTo('1.0');
+	$self->editModified(0);
+	$self->Callback('-modifycall', '1.0');
+	return 1
 }
 
 sub matchCheck {
@@ -722,6 +723,7 @@ sub ReplaceSelectionsWith {
 		$self->RecordUndo('replace', $first, $old, $new_text);
 		$self->SUPER::insert($last, $new_text);
 		$self->SUPER::delete($first, $last);
+		$self->Callback('-modifycall', $first);
 
 	}
 	############################################################
@@ -740,6 +742,42 @@ sub ResetRedo {
 
 sub ResetUndo {
 	$_[0]->{UNDOSTACK} = [];
+}
+
+=item B<save>
+
+=cut
+
+sub save {
+	my ($self, $file) = @_;
+
+	unless (open OUTFILE, '>', $file) { 
+		warn "cannot open $file";
+		return 0
+	};
+	my $size = length($self->get('1.0', 'end - 1c'));
+	my $saved = 0;
+	my $count = 0;
+	my $thresh = $self->cget('-updatelines');
+	$self->clear;
+	my $index = '1.0';
+	while ($self->compare($index,'<','end')) {
+		my $end = $self->index("$index lineend + 1c");
+		my $line = $self->get($index,$end);
+		print OUTFILE $line;
+		$index = $end;
+		$saved = $saved + length($line);
+		$count ++;
+		if ($count >= $thresh) {
+			my $perc = int(($saved / $size) * 100);
+			$self->Callback('-updatecall', $perc);
+			$count = 0;
+		}
+	}
+	$self->Callback('-updatecall', 100);
+	close OUTFILE;
+	$self->editModified(0);
+	return 1
 }
 
 #fix for selectAll of Tk::Text. 
@@ -859,7 +897,7 @@ sub undo {
 			my $lold = length($old);
 			$self->markSet('insert', $self->index("$pos + $lold chars"));
 		} else {
-			carp "invalid undo mode $mode, should be 'delete', 'insert', or 'replace'\n";
+			carp "invalid undo mode '$mode"."', should be 'delete', 'insert', or 'replace'\n";
 		}
 		$self->editModified($o->{'modified'});
 		if (my $sel = $o->{'selection'}) {
@@ -870,18 +908,6 @@ sub undo {
 		$self->Callback('-modifycall', $pos);
 	}
 }
-
-# sub UndoRedoSizes {
-# 	my $self = shift;
-# 	$self->{UNDOREDOSIZES} = shift if @_;
-# 	return $self->{UNDOREDOSIZES}
-# }
-# 
-# sub UndoStackSize {
-# 	my $stack = $_[0]->{UNDOSTACK};
-# 	my $size = @$stack;
-# 	return $size;
-# }
 
 =item B<unindent>
 
@@ -908,19 +934,23 @@ sub unindent {
 	}
 }
 
+=item B<visualbegin>
+
+=cut
+
+sub visualbegin {
+	my $self = shift;
+	return $self->linenumber('@0,0');
+}
+
 =item B<visualend>
 
 =cut
 
 sub visualend {
 	my $self = shift;
-	my $end = $self->linenumber('end - 1 chars');
-	my ($first, $last) = $self->yview;
-	my $vend = int($last * $end) + 2;
-	if ($vend > $end) {
-		$vend = $end;
-	}
-	return $vend;
+	my $height = $self->height;
+	return $self->linenumber('@0,' . $height);
 }
 
 =back
