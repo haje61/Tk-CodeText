@@ -315,6 +315,8 @@ sub FlushConditional {
 	} elsif ($mode eq 'replace') {
 		$len = length($self->BufferReplace);
 		$icmoved = ($self->index("$start + $len chars") ne $pos)
+	} else {
+		carp "illegal buffermode '$mode'\n";
 	}
 	if ((exists $flushkeys{$key}) or ($icmoved)) {
 		$self->Flush;
@@ -591,8 +593,8 @@ sub RecordUndo {
 			$self->PushUndoRaw('delete', $ranges[0], $text, $self->editModified);
 		} else {
 			my $bufmode = $self->BufferMode;
-			$self->BufferMode($mode) if $bufmode eq '';
-			$self->Flush if $mode ne $self->BufferMode;
+			$self->Flush if $mode ne $bufmode;
+			$self->BufferMode($mode);
 
 
 			my $end = $self->index('insert');
@@ -615,8 +617,8 @@ sub RecordUndo {
 			$self->PushUndoRaw($mode, $pos, $text, $self->editModified);
 		} else {
 			my $bufmode = $self->BufferMode;
-			$self->BufferMode($mode) if $bufmode eq '';
-			$self->Flush if $mode ne $self->BufferMode;
+			$self->Flush if $mode ne $bufmode;
+			$self->BufferMode($mode);
 
 
 			$self->BufferStart($pos) if $self->FlushConditional($pos, $text);
@@ -628,13 +630,13 @@ sub RecordUndo {
 		my ($pos, $old, $new) = @content;
 		$pos = $self->index($pos);
 
-		if (length($new) > 1) {
+		if ((length($new) > 1) or ($self->selectionExists)) {
 			$self->Flush;
 			$self->PushUndoRaw($mode, $pos, $old, $new, $self->editModified);
 		} else {
 			my $bufmode = $self->BufferMode;
-			$self->BufferMode($mode) if $bufmode eq '';
-			$self->Flush if $mode ne $self->BufferMode;
+			$self->Flush if $mode ne $bufmode;
+			$self->BufferMode($mode);
 
 			$self->BufferStart($pos) if $self->FlushConditional($pos, $new);
 			my $buf = $self->Buffer;

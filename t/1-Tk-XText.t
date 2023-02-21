@@ -3,19 +3,57 @@ use strict;
 use warnings;
 use Test::More tests => 139;
 use Test::Tk;
-use Tk;
 
+use Data::Dumper;
+use Tk;
+require Tk::NoteBook;
+require Tk::ROText;
 BEGIN { use_ok('Tk::XText') };
 
 createapp;
 
 my $text;
+my $utext;
+my $rtext;
+my $btext;
 if (defined $app) {
-	$text = $app->XText(
+	my $nb = $app->NoteBook->pack(-expand => 1, -fill => 'both');
+	my $tp = $nb->add('Widget', -label => 'Widget');
+	$text = $tp->XText(
+		-modifycall => \&tmodified,
+		-tabs => '7m',
+		-font => 'Hack 12',
 	)->pack(
 		-expand => 1,
 		-fill => 'both',
-	) if defined $app;
+	);
+
+	my $up = $nb->add('UPage', -label => 'Undo stack');
+	$utext = $up->ROText(
+		-tabs => '7m',
+		-font => 'Hack 12',
+	)->pack(
+		-expand => 1,
+		-fill => 'both',
+	);
+
+	my $rp = $nb->add('RPage', -label => 'Redo stack');
+	$rtext = $rp->ROText(
+		-tabs => '7m',
+		-font => 'Hack 12',
+	)->pack(
+		-expand => 1,
+		-fill => 'both',
+	);
+
+	my $bp = $nb->add('Buffer', -label => 'Buffer');
+	$btext = $bp->ROText(
+		-tabs => '7m',
+		-font => 'Hack 12',
+	)->pack(
+		-expand => 1,
+		-fill => 'both',
+	);
 
 	my $pos = '';
 	my $lines = '';
@@ -85,7 +123,28 @@ if (defined $app) {
 		-text=> 'Clear modified', 
 		-command => ['editModified', $text, 0], 
 	)->pack(-side => 'left', -pady => 2);
+	$sb->Button(
+		-text=> 'Load Ref file',
+		-command => ['load', $text, 'lib/Tk/CodeTextOld.pm'], 
+	)->pack(-side => 'left');
 	&$call;
+}
+
+
+sub tmodified {
+	$utext->delete('1.0', 'end');
+	$utext->insert('end', Dumper $text->{UNDOSTACK});
+	$rtext->delete('1.0', 'end');
+	$rtext->insert('end', Dumper $text->{REDOSTACK});
+	$btext->delete('1.0', 'end');
+	my $buf = $text->Buffer;
+	my $bstart = $text->BufferStart;
+	my $mode = $text->BufferMode;
+	my $mod = $text->BufferModified;
+	$btext->insert('end', "buffer      :'$buf'\n");
+	$btext->insert('end', "bufferstart :'$bstart'\n");
+	$btext->insert('end', "buffermode  :'$mode'\n");
+	$btext->insert('end', "modified    :'$mod'\n");
 }
 
 #testvalues

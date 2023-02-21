@@ -51,6 +51,7 @@ use base qw(Tk::Derived Tk::Frame);
 use Syntax::Kamelon;
 use Tk;
 require Tk::XText;
+require Tk::CodeText::StatusBar;
 
 
 Construct Tk::Widget 'CodeText';
@@ -88,32 +89,6 @@ my @defaultattributes = (
 	['VerbatimString', -foreground => 'orange', -font => [-weight => 'bold']],
 	['Warning', -background => 'yellow', -foreground => 'darkred'],
 );
-
-my $save_pixmap = '
-/* XPM */
-static char *save[]={
-"16 16 4 1",
-". c None",
-"# c #000000",
-"a c #808080",
-"b c #ffff00",
-"................",
-"..############..",
-".#aaaaaaaaaaaa#.",
-".#aaaaaaaaaaaa#.",
-".#aaaaaaaaaaaa#.",
-".#aaaaaaaaaaaa#.",
-".#aaaaaaaaaaaa#.",
-".#aaaaaaaaaaaa#.",
-".#aa########aa#.",
-".#aa########aa#.",
-".#aa########aa#.",
-".#aa########aa#.",
-".#aa#bbbbbb#aa#.",
-".#aa#bbbbbb#aa#.",
-"..############..",
-"................"};
-';
 
 my $minusimg = '#define indicatorclose_width 11
 #define indicatorclose_height 11
@@ -172,9 +147,6 @@ static unsigned char indicatoropen_bits[] = {
 sub Populate {
 	my ($self,$args) = @_;
 
-	my $saveimage = delete $args->{'-saveimage'};
-	$saveimage = $self->Pixmap(-data => $save_pixmap) unless defined $saveimage;
-
 	$self->SUPER::Populate($args);
 
 	$self->{COLORINF} = [];
@@ -221,72 +193,15 @@ sub Populate {
 	)->pack(-side => 'left', -expand =>1, -fill => 'both');
 
 	#create the statusbar
-	my $pos = '';
-	my $lines = '';
-	my $size = '';
-	my $ovr = '';
-
-	my $sb = $self->Frame;
-
-	my $modlab = $sb->Label(
-		-image => $saveimage,
+	my $statusbar = $self->StatusBar(
+		-widget => $self,
 	);
-	my $poslab = $sb->Label(
-		-text => " Pos:"
-	)->pack(-side => 'left', -pady => 2);
-	$sb->Label(
-		-textvariable => \$pos, 
-		-width => 8, 
-		-relief => 'groove'
-	)->pack(-side => 'left', -pady => 2);
-
-	$sb->Label(
-		-text => " Lines:"
-	)->pack(-side => 'left', -pady => 2);
-	$sb->Label(
-		-textvariable => \$lines, 
-		-width => 5, 
-		-relief => 'groove'
-	)->pack(-side => 'left', -pady => 2);
-
-	$sb->Label(
-		-text => " Size:"
-	)->pack(-side => 'left', -pady => 2);
-	$sb->Label(
-		-textvariable => \$size, 
-		-width => 8, -relief => 'groove')->pack(-side => 'left', -pady => 2);
-	$sb->Label(
-		-textvariable => \$ovr,
-		-width => 11, 
-		-relief => 'groove'
-	)->pack(-side => 'left', -pady => 2);
-
-	my $call;
-	$call = sub {
-		$pos = $text->index('insert');
-		$lines = $text->linenumber('end - 1c');
-		$size = length($text->get('1.0', 'end - 1c'));
-		if ($text->OverstrikeMode) {
-			$ovr = 'OVERWRITE',
-		} else {
-			$ovr = 'INSERT',
-		}
-		if ($text->editModified) {
-			$modlab->pack(
-				-side => 'left',
-				-before => $poslab,
-			);
-		} else {
-			$modlab->packForget
-		}
-		$self->after(200, $call);
-	};
-	$self->after(200, $call);
+	$self->after(10, ['StatusUpdate', $statusbar]);
 
 	$self->Advertise(XText => $text);
 	$self->Advertise(Numbers => $numbers);
 	$self->Advertise(Folds => $folds);
-	$self->Advertise(Statusbar => $sb);
+	$self->Advertise(Statusbar => $statusbar);
 
 	# hack for getting proper bitmap foreground
 	my $l = $self->Label;
@@ -433,10 +348,7 @@ sub foldButton {
 	my $folds = $self->Kamelon->Formatter->Folds;
 	my $fbuttons = $self->FoldButtons;
 	unless (exists $fbuttons->{$line}) {
-	
 		my $data = $folds->{$line};
-# 		my $last = $data->{'end'} - 1;
-
 		my @opt = ();
 		my $state;
 		if ($self->isHidden($line + 1)) {
@@ -538,6 +450,9 @@ sub FoldInf {
 
 sub foldsCheck {
 	my $self = shift;
+
+	return unless $self->cget('-showfolds');
+
 	my $folds = $self->Kamelon->Formatter->Folds;
 	my $inf = $self->FoldInf;
 	my $fframe = $self->Subwidget('Folds');
@@ -688,6 +603,8 @@ sub Kamelon {
 sub lnumberCheck {
 	my $self = shift;
 
+	return unless $self->cget('-shownumbers');
+
 	my $widget = $self->Subwidget('XText');
 	my $count = 0;
 
@@ -764,6 +681,7 @@ sub showfolds {
 				-fill => 'y',
 			);
 			$self->{FOLDSVISIBLE} = 1;
+			$self->foldsCheck;
 		} else {
 			$self->{FOLDSVISIBLE} = 0;
 			$f->packForget;
@@ -783,14 +701,14 @@ sub shownumbers {
 	if (defined $flag) {
 		if ($flag) {
 			my $before = $self->Subwidget('XText');
-			my $folds = $self->Subwidget('Folds');
-			$before = $folds if $folds->ismapped;
+			$before = $self->Subwidget('Folds') if $self->{FOLDSVISIBLE};
 			$f->pack(
 				-side => 'left',
 				-before => $before,
 				-fill => 'y',
 			);
 			$self->{NUMBERSVISIBLE} = 1;
+			$self->lnumberCheck;
 		} else {
 			$f->packForget;
 			$self->{NUMBERSVISIBLE} = 0;
@@ -808,6 +726,7 @@ sub showstatus {
 				-fill => 'x',
 			);
 			$self->{STATUSVISIBLE} = 1;
+			$f->StatusUpdate;
 		} else {
 			$f->packForget;
 			$self->{STATUSVISIBLE} = 0;
