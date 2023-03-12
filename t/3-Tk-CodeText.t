@@ -10,7 +10,7 @@ createapp;
 
 my $text = $app->CodeText(
 	-tabs => '7m',
-	-font => 'Hack 12',
+	-font => 'fixed 12',
 	-syntax => 'XML',
 )->pack(
 	-expand => 1,

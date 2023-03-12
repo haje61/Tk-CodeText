@@ -12,12 +12,6 @@ sub new {
 	return $self
 }
 
-sub LineNumber {
-	my $self = shift;
-	$self->{LINENUMBER} = shift if @_;
-	return $self->{LINENUMBER}
-}
-
 sub ParseResultEndRegion {
 	my $self = shift;
 	my $region = pop @_;
@@ -164,7 +158,9 @@ sub Populate {
 	$self->{NOHIGHLIGHTING} = 1;
 	$self->{NUMBERSVISIBLE} = 0;
 	$self->{NUMBERINF} = [];
+	$self->{POSTCONFIG} = 0;
 	$self->{STATUSVISIBLE} = 0;
+	$self->{SYNTAX} = 'None';
 	
 	#create editor frame
 	my $ef = $self->Frame(
@@ -263,7 +259,10 @@ sub Populate {
 			$text->bind( "<$event>", sub { $self->contentCheck } );
 		}
 	}
- 	$self->after(1, [lnumberCheck => $self]);
+ 	$self->after(1, sub {
+		$self->{POSTCONFIG} = 1;
+		$self->lnumberCheck;
+ 	});
 }
 
 sub attributes {
@@ -456,8 +455,8 @@ sub foldsCheck {
 	my $folds = $self->Kamelon->Formatter->Folds;
 	my $inf = $self->FoldInf;
 	my $fframe = $self->Subwidget('Folds');
-	my $line = $self->visualbegin;
-	my $last = $self->visualend;
+	my $line = $self->visualBegin;
+	my $last = $self->visualEnd;
 	my $fbuttons = $self->FoldButtons;
 
 	#clear out currently mapped fold keys
@@ -520,10 +519,10 @@ sub highlightLine {
 	$kam->LineNumber($num);
 	my $xt = $self->Subwidget('XText');
 	my $begin = "$num.0"; my $end = $xt->index("$num.0 lineend + 1c");
-#	remove all existing tags in this line
-	foreach my $tn ($self->tags) {
-		$xt->tagRemove($tn, $begin, $end);
-	}	
+#	#remove all existing tags in this line
+# 	foreach my $tn ($self->tags) {
+# 		$xt->tagRemove($tn, $begin, $end);
+# 	}	
 	my $cli = $self->ColorInf;
 	my $k = $cli->[$num - 1];
 	$kam->StateSet(@$k);
@@ -545,6 +544,10 @@ sub highlightLine {
 
 sub highlightLoop {
 	my $self = shift;
+	if ($self->NoHighlighting) {
+		$self->LoopActive(0);
+		return
+	}
 	my $colored = $self->Colored;
 	my $xt = $self->Subwidget('XText');
 	if ($colored <= $xt->linenumber('end - 1c')) {
@@ -560,28 +563,36 @@ sub highlightLoop {
 
 sub highlightPurge {
 	my ($self, $line) = @_;
-	if ($line <= $self->Colored) {
+	$line = 1 unless defined $line;
 
-		#purge highlightinfo
-		$self->Colored($line);
-		my $cli = $self->ColorInf;
-		if (@$cli) { splice(@$cli, $line) };
-		$self->highlightLoop unless $self->LoopActive;
+	#purge highlightinfo
+	$self->highlightRemove($line);
+	$self->Colored($line);
+	my $cli = $self->ColorInf;
+	if (@$cli) { splice(@$cli, $line) };
 		
-		#purge folds
-		$self->foldsClear;
-		my $folds = $self->Kamelon->Formatter->Folds;
-		for (keys %$folds) {
-			delete $folds->{$_} if $_ >= $line
+	#purge folds
+	$self->foldsClear;
+	my $folds = $self->Kamelon->Formatter->Folds;
+	for (keys %$folds) {
+		delete $folds->{$_} if $_ >= $line
+	}
+	#clear out unused fold buttons
+	my $btns = $self->FoldButtons;
+	for (keys %$btns) {
+		unless (exists $folds->{$_}) {
+			my $b = delete $btns->{$_};
+			$b->{'button'}->destroy;
 		}
-		#clear out unused fold buttons
-		my $btns = $self->FoldButtons;
-		for (keys %$btns) {
-			unless (exists $folds->{$_}) {
-				my $b = delete $btns->{$_};
-				$b->{'button'}->destroy;
-			}
-		}
+	}
+	$self->highlightLoop unless $self->LoopActive;
+}
+
+sub highlightRemove {
+	my ($self, $begin) = @_;
+	$begin = 1 unless defined $begin;
+	for ($self->tags) {
+		$self->tagRemove($_, "$begin.0", 'end')
 	}
 }
 
@@ -603,13 +614,15 @@ sub Kamelon {
 sub lnumberCheck {
 	my $self = shift;
 
+	return unless $self->{POSTCONFIG};
 	return unless $self->cget('-shownumbers');
 
 	my $widget = $self->Subwidget('XText');
 	my $count = 0;
+	my $font = $widget->cget('-font');
 
-	my $line = $self->visualbegin;
-	my $last = $self->visualend;
+	my $line = $self->visualBegin;
+	my $last = $self->visualEnd;
 
 	my $nimf = $self->{NUMBERINF};
 	my $numframe = $self->Subwidget('Numbers');
@@ -623,7 +636,7 @@ sub lnumberCheck {
 			my $l = $numframe->Label(
 				-justify => 'right',
 				-anchor => 'ne',
-				-font => $widget->cget('-font'),
+				-font => $font,
 				-borderwidth => 0,
 			);
 			push @$nimf, $l;
@@ -740,13 +753,19 @@ sub syntax {
 	my ($self, $new) = @_;
 	my $kam = $self->Kamelon;
 	if (defined($new)) {
-		if ($new eq 'None') {
-			$self->NoHighlighting(1);
-		} else {
+		$self->NoHighlighting(1);
+		$self->highlightPurge;
+		$self->Subwidget('XText')->configure(
+			-mlcommentend => undef,
+			-mlcommentstart => undef,
+			-slcomment => undef,
+		);
+		unless ($new eq 'None') {
 			$kam->Syntax($new);
 			$self->NoHighlighting(0);
-			$self->Colored(1);
+			$self->Colored(0);
 			$self->ColorInf([ [$kam->StateGet] ]);
+			my $idx = $kam->GetIndexer;
 			$self->highlightLoop unless $self->LoopActive;
 		}
 		$self->{SYNTAX} = $new;

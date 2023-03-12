@@ -66,7 +66,6 @@ sub Populate {
 	$self->{BUFFERMODIFIED} = 0;
 	$self->{BUFFERSTART} = '1.0';
 	$self->{BUFFERREPLACE} = '';
-# 	$self->{UNDOREDOSIZES} = [0, 0];
 
 	$self->ResetRedo;
 	$self->ResetUndo;
@@ -74,13 +73,14 @@ sub Populate {
 	
 	$self->ConfigSpecs(
 		-autoindent => ['PASSIVE', 'autoIndent', 'AutoIndent', 0],
-		-commentend => ['PASSIVE'],
-		-commentstart => ['PASSIVE', undef, undef, "#"],
 		-disablemenu => ['PASSIVE', 'disableMenu', 'Disablemenu', 0],
-		-indentchar => ['PASSIVE', undef, undef, "\t"],
+		-indentstyle => ['PASSIVE', undef, undef, "tab"],
 		-match => ['PASSIVE', undef, undef, '[]{}()'],
 		-matchoptions	=> ['METHOD', undef, undef, [-background => 'red', -foreground => 'yellow']],
 		-modifycall => ['CALLBACK', undef, undef, sub {}],
+		-mlcommentend => ['PASSIVE'],
+		-mlcommentstart => ['PASSIVE'],
+		-slcomment => ['PASSIVE'],
 		-updatecall => ['CALLBACK', undef, undef, sub {}],
 		-updatelines => ['PASSIVE', undef, undef, 100],
 		DEFAULT => [ 'SELF' ],
@@ -99,13 +99,14 @@ sub Populate {
 
 sub Backspace {
 	my $self = shift;
-	$self->RecordUndo('backspace');
 	if ($self->compare('insert','!=','1.0')) { #We are not at the start of the text
+		$self->RecordUndo('backspace');
 		if ($self->selectionExists) {
 			$self->SUPER::delete('sel.first','sel.last');
 		} else {
 			$self->SUPER::delete('insert-1c')
 		}
+		$self->Callback('-modifycall', 'insert');
 	}
 }
 
@@ -197,33 +198,52 @@ sub clear {
 
 sub comment {
 	my $self = shift;
-	my $start = $self->cget('-commentstart');
-	my $end = $self->cget('-commentend');
-	if ($self->selectionExists) {
-		if (defined $end) {
+	my $slstart = $self->cget('-slcomment');
+	my $mlend = $self->cget('-mlcommentend');
+	my $mlstart = $self->cget('-mlcommentstart');
+	if ($self->CommentType eq 'multi') {
+		#multi line operation
+		if ((defined $mlend) and (defined $mlstart)) {
 			my ($rb, $re) = $self->tagRanges('sel');
 			my $old = $self->get($rb, $re);
-			$self->SUPER::insert($rb, $start);
-			$self->SUPER::insert($re, $end);
-			my $len = length $end;
+			$self->SUPER::insert($rb, $mlstart);
+			$self->SUPER::insert($re, $mlend);
+			my $len = length $mlend;
 			$re = $self->index("$re + $len chars");
 			my $new = $self->get($rb, $re);
 			$self->RecordUndo('replace', $rb, $old, $new);
 			$self->unselectAll;
 			$self->tagAdd('sel',$rb, $re);
 			$self->Callback('-modifycall', $rb);
-		} else {
-			$self->selectionModify($start, 0)		
+		} elsif (defined $slstart) { 
+			$self->selectionModify($slstart, 0)		
 		}
-	} else {
+	} else { 
+		#single line operation
 		my $begin = $self->index('insert linestart');
-		my $old = $self->get($begin, "$begin lineend");
-		$self->SUPER::insert($begin, $start);
-		$self->SUPER::insert("$begin lineend", $end) if defined $end;
+		my $end = $self->index("$begin lineend");
+		my $old = $self->get($begin, $end);
+		if (defined $slstart) {
+			$self->SUPER::insert($begin, $slstart);
+		} elsif ((defined $mlend) and (defined $mlstart)) {
+			$self->SUPER::insert($end, $mlend);
+			$self->SUPER::insert($begin, $mlstart);
+		}
 		my $new = $self->get($begin, "$begin lineend");
 		$self->RecordUndo('replace', $begin, $old, $new);
 		$self->Callback('-modifycall', $begin);
 	}
+}
+
+sub CommentType {
+	my $self = shift;
+	if ($self->SelectionExists) {
+		my $mode= 'single'; #does the selection span over multiple lines?
+		my ($rb, $re) = $self->tagRanges('sel');
+		$mode = 'multi' if ($self->linenumber($rb) < $self->linenumber($re));
+		return $mode
+	}
+	return 'single'	
 }
 
 sub delete {
@@ -356,7 +376,7 @@ sub goTo {
 
 sub indent {
 	my $self = shift;
-	my $ichar = $self->cget('-indentchar');
+	my $ichar = $self->indentString;
 	if ($self->selectionExists) {
 		$self->selectionModify($ichar, 0);
 	} else {
@@ -367,6 +387,21 @@ sub indent {
 		$self->RecordUndo('replace', $begin, $old, $new);
 		$self->Callback('-modifycall', $begin);
 	}
+}
+
+sub indentString {
+	my $self = shift;
+	my $style = $self->cget('-indentstyle');
+	my $ichar = '';
+	if ($style eq 'tab') {
+		$ichar = "\t";
+	} else {
+		my $str = '';
+		for (0 .. $style) {
+			$ichar = $ichar . ' '
+		}
+	}
+	return $ichar;
 }
 
 sub insert {
@@ -472,7 +507,7 @@ sub matchCheck {
 				my $m = substr($v, $p + 1, 1);
 				$self->matchFind('-forwards', $c, $m,
 					$self->index('insert'),
-					$self->index($self->visualend . '.0 lineend'),
+					$self->index($self->visualEnd . '.0 lineend'),
 				);
 			}
 		}
@@ -832,36 +867,43 @@ sub selectionModify {
 
 sub uncomment {
 	my $self = shift;
-	my $start = $self->cget('-commentstart');
-	my $end = $self->cget('-commentend');
-	my $lstart = length($start);
-	my $lend = length($end) if defined $end;
-	if ($self->selectionExists) {
+	my $slstart = $self->cget('-slcomment');
+	my $mlstart = $self->cget('-mlcommentstart');
+	my $mlend = $self->cget('-mlcommentend');
+	my $lend = length($mlend) if defined $mlend;
+	my $lstart = length($mlstart) if defined $mlstart;
+	if ($self->CommentType eq 'multi') {
 		my ($rb, $re) = $self->tagRanges('sel');
 		$rb = $self->index("$rb linestart");
 		$re = $self->index("$re lineend");
 		my $old = $self->get($rb, $re);
-		if ((defined $end) and ($old =~ /^$start/) and ($old =~ /$end$/)){
-			$self->SUPER::delete($rb, "$rb + $lstart chars");
-			$self->SUPER::delete("$re - $lend chars", $re);
-			my $new = $self->get($rb, $re);
-			$self->RecordUndo('replace', $rb, $old, $new);
-			$self->Callback('-modifycall', $rb);
-		} else {
-			$self->selectionModify($start, 1)		
+		if ((defined $mlstart) and(defined $mlend)) {
+			if (($old =~ /^$mlstart/) and ($old =~ /$mlend$/)){
+				$self->SUPER::delete($rb, "$rb + $lstart chars");
+				$self->SUPER::delete("$re - $lend chars", $re);
+				my $new = $self->get($rb, $re);
+				$self->RecordUndo('replace', $rb, $old, $new);
+				$self->Callback('-modifycall', $rb);
+			}
+		} elsif (defined $slstart) {
+			$self->selectionModify($slstart, 1)		
 		}
 	} else {
 		my $rb = $self->index('insert linestart');
 		my $re =  $self->index('insert lineend');
 		my $old = $self->get($rb, $re);
-		if ((defined $end) and ($old =~ /^$start/) and ($old =~ /$end$/)){
+		if (defined($slstart)) {
+			$lstart = length $slstart;
 			$self->SUPER::delete('insert linestart', "insert linestart + $lstart chars");
-			$self->SUPER::delete( "insert lineend - $lend chars", 'insert lineend');
-		} elsif ($old =~ /^$start/) {
-			$self->SUPER::delete('insert linestart', "insert linestart + $lstart chars");
+		} elsif ((defined $mlstart) and(defined $mlend)) {
+			if (($old =~ /^$mlstart/) and ($old =~ /$mlend$/)){
+				$self->SUPER::delete('insert linestart', "insert linestart + $lstart chars");
+				$self->SUPER::delete( "insert lineend - $lend chars", 'insert lineend');
+			}
 		}
 		my $new = $self->get($rb, "$rb lineend");
-		$self->RecordUndo('replace', $rb, $old, $new)
+		$self->RecordUndo('replace', $rb, $old, $new);
+		$self->Callback('-modifycall', $rb);
 	}
 }
 
@@ -917,17 +959,16 @@ sub undo {
 
 sub unindent {
 	my $self = shift;
-	my $ichar = $self->cget('-indentchar');
+	my $ichar = $self->indentString;
 	if ($self->selectionExists) {
 		$self->selectionModify($ichar, 1);
 	} else {
 		my $index = $self->index('insert');
 		my $start = $self->index('insert linestart');
-		my $indentchar = $self->cget('-indentchar');
-		my $len = length($indentchar);
+		my $len = length($ichar);
 		my $string = $self->get($start, $index);
 		my $old = $self->get($start, "$start lineend");
-		if ($string =~ /^$indentchar+/) {
+		if ($string =~ /^$ichar/) {
 			$self->SUPER::delete($start, "$start + $len" . "c");
 		}
 		my $new = $self->get($start, "$start lineend");
@@ -936,20 +977,20 @@ sub unindent {
 	}
 }
 
-=item B<visualbegin>
+=item B<visualBegin>
 
 =cut
 
-sub visualbegin {
+sub visualBegin {
 	my $self = shift;
 	return $self->linenumber('@0,0');
 }
 
-=item B<visualend>
+=item B<visualEnd>
 
 =cut
 
-sub visualend {
+sub visualEnd {
 	my $self = shift;
 	my $height = $self->height;
 	return $self->linenumber('@0,' . $height);

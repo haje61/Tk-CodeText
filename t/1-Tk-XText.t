@@ -351,10 +351,11 @@ push @tests, (
 		return gettext; 
 	}, $original, 'Redo Unidented selection' ],
 
-	#testing comment line 1 and undo redo
+	#testing comment line 1 with # and undo redo
 	$init,
 
 	[ sub {
+		$text->configure(-slcomment => '#');
 		$text->SetCursor('1.0 lineend');
 		$text->comment;
 		return gettext; 
@@ -436,12 +437,13 @@ push @tests, (
 		return gettext; 
 	}, $original, 'Redo UnComment selection 1' ],
 
-	#testing comment line 2 and undo redo
+	#testing comment line 2 with '<<-', '->>' and undo/redo
 	[ sub {
-		$text->configure(-commentstart => '<<-');
-		$text->configure(-commentend => '->>');
+		$text->configure(-slcomment => undef);
+		$text->configure(-mlcommentstart => '<<-');
+		$text->configure(-mlcommentend => '->>');
 		$text->unselectAll;
-		$text->SetCursor('0.0 lineend');
+		$text->SetCursor('1.0 lineend');
 		$text->comment;
 		return gettext; 
 	}, $commentline2, 'Comment line 2' ],
