@@ -31,19 +31,21 @@ Construct Tk::Widget 'XText';
 
 =item Switch: B<-autoindent>
 
-=item Switch: B<-commentend>
-
-=item Switch: B<-commentstart>
-
 =item Switch: B<-disablemenu>
 
-=item Switch: B<-indentchar>
+=item Switch: B<-indentstyle>
 
 =item Switch: B<-match>
 
 =item Switch: B<-matchoptions>
 
+=item Switch: B<-mlcommentend>
+
+=item Switch: B<-mlcommentstart>
+
 =item Switch: B<-modifycall>
+
+=item Switch: B<-slcomment>
 
 =item Switch: B<-updatecall>
 
@@ -211,9 +213,9 @@ sub comment {
 			my $len = length $mlend;
 			$re = $self->index("$re + $len chars");
 			my $new = $self->get($rb, $re);
-			$self->RecordUndo('replace', $rb, $old, $new);
 			$self->unselectAll;
 			$self->tagAdd('sel',$rb, $re);
+			$self->RecordUndo('replace', $rb, $old, $new);
 			$self->Callback('-modifycall', $rb);
 		} elsif (defined $slstart) { 
 			$self->selectionModify($slstart, 0)		
@@ -273,13 +275,45 @@ sub doAutoIndent {
 sub EditMenuItems {
 	my $self = shift;
 	return [
-		@{$self->SUPER::EditMenuItems},
+		["command"=>'~Copy',
+			-accelerator => 'CTRL+C',
+			-command => [$self => 'clipboardCopy']
+		],
+		["command"=>'C~ut', 
+			-accelerator => 'CTRL+X',
+			-command => [$self => 'clipboardCut']
+		],
+		["command"=>'~Paste', 
+			-accelerator => 'CTRL+V',
+			-command => [$self => 'clipboardPaste']
+		],
 		"-",
-		["command"=>'Comment', -command => [$self => 'comment']],
-		["command"=>'Uncomment', -command => [$self => 'uncomment']],
+		["command"=>'~Undo', 
+			-accelerator => 'CTRL+Z',
+			-command => [$self => 'undo']
+		],
+		["command"=>'~Redo', 
+			-accelerator => 'CTRL+SHIFT+Z',
+			-command => [$self => 'redo']
+		],
 		"-",
-		["command"=>'Indent', -command => [$self => 'indent']],
-		["command"=>'Unindent', -command => [$self => 'unindent']],
+		["command"=>'C~omment', 
+			-accelerator => 'CTRL+G',
+			-command => [$self => 'comment']
+		],
+		["command"=>'U~ncomment', 
+			-accelerator => 'CTRL+SHIFT+G',
+			-command => [$self => 'uncomment']
+		],
+		"-",
+		["command"=>'~Indent', 
+			-accelerator => 'CTRL+J',
+			-command => [$self => 'indent']
+		],
+		["command"=>'Unin~dent', 
+			-accelerator => 'CTRL+SHIFT+J',
+			-command => [$self => 'unindent']
+		],
 	];
 }
 
@@ -851,10 +885,12 @@ sub selectionModify {
 				$self->SUPER::delete("$start linestart", "$start linestart + $len chars");
 			}
 		} else {
-			$self->insert("$start linestart", $char)
+			$self->SUPER::insert("$start linestart", $char)
 		}
 		$start = $self->index("$start + 1 lines");
 	}
+	$self->unselectAll;
+	$self->tagAdd('sel', @ranges);
 	my $new = $self->get(@ranges);
 	$self->RecordUndo('replace', $ranges[0], $old, $new);
 	$self->Callback('-modifycall', $ranges[0]);
@@ -882,6 +918,8 @@ sub uncomment {
 				$self->SUPER::delete($rb, "$rb + $lstart chars");
 				$self->SUPER::delete("$re - $lend chars", $re);
 				my $new = $self->get($rb, $re);
+				$self->unselectAll;
+				$self->tagAdd('sel', $rb, $re);
 				$self->RecordUndo('replace', $rb, $old, $new);
 				$self->Callback('-modifycall', $rb);
 			}

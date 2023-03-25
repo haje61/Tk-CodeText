@@ -10,7 +10,7 @@ createapp;
 
 my $text = $app->CodeText(
 	-tabs => '7m',
-	-font => 'fixed 12',
+	-font => 'Monospace 12',
 	-syntax => 'XML',
 )->pack(
 	-expand => 1,
@@ -26,7 +26,7 @@ $text->Subwidget('Statusbar')->Button(
 $text->Subwidget('Statusbar')->Button(
 	-text=> 'Load Ref file',
 	-relief => 'flat',
-	-command => ['load', $text, 'lib/Tk/CodeTextOld.pm'], 
+	-command => ['load', $text, 't/ref_file.pl'], 
 )->pack(-side => 'left');
 
 $app->configure(-menu => $app->Menu(

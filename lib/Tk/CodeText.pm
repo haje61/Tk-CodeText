@@ -9,16 +9,60 @@ sub new {
 	my $widget = shift;
 	my $self = $class->SUPER::new(@_);
 	$self->{WIDGET} = $widget;
+	$self->CreateExtIndex;
 	return $self
+}
+
+sub CreateExtIndex {
+	my $self = shift;
+	my $idx = $self->GetIndexer;
+	my $index = $idx->{INDEX};
+	my %eindex = ();
+	for ($idx->AvailableSyntaxes) {
+		my $lang = $_;
+		my $extl = $index->{$lang}->{'ext'};
+		my @o = split(/;/, $extl);
+		for (@o) {
+			my $e = $_;
+			if (exists $eindex{$e}) {
+				my $p = $eindex{$e};
+				push @$p, $lang;
+			} else {
+				$eindex{$e} = [ $lang ];
+			}
+		}
+	}
+	if (%eindex) {
+		$self->{EXTENSIONS} = \%eindex;
+	}
 }
 
 sub ParseResultEndRegion {
 	my $self = shift;
 	my $region = pop @_;
-	$self->Formatter->FoldEnd($region);
-	$self->Widget->foldsCheck;
+	my $formatter = $self->Formatter;
+	my $widget = $self->Widget;
+	my $top = $formatter->FoldStackTop;
+	if (defined $top) {
+		my $begin = $formatter->FoldStackTop->{start};
+		$formatter->FoldEnd($region);
+		$widget->foldsCheck if (($begin >= $widget->visualBegin) and ($begin <= $widget->visualEnd));
+	}
 	my $parser = pop @_;
 	return &$parser($self, @_);
+}
+
+sub SuggestSyntax {
+	my ($self, $file) = @_;
+	my $hsh = $self->{EXTENSIONS};
+	my $ext;
+	if ($file =~ /(\.[^\.]+)$/) {
+		$ext = $1;
+	}
+	return undef unless defined $ext;
+	my $key = "*$ext";
+	return $hsh->{$key}->[0] if exists $hsh->{$key};
+	return undef;
 }
 
 sub Widget { return $_[0]->{WIDGET} }
@@ -45,43 +89,45 @@ use base qw(Tk::Derived Tk::Frame);
 use Syntax::Kamelon;
 use Tk;
 require Tk::XText;
+require Tk::Font;
 require Tk::CodeText::StatusBar;
+require Tk::CodeText::Theme;
 
 
 Construct Tk::Widget 'CodeText';
 
 my @defaultattributes = (
-	['Alert', -background => 'orange', -foreground => 'blue'],
-	['Annotation', -foreground => 'darkgrey'],
-	['Attribute', -foreground => 'green', -font => [-weight => 'bold']],
-	['BaseN', -foreground => 'darkgreen'],
-	['BuiltIn', -foreground => 'purple'],
-	['Char', -foreground => 'magenta'],
-	['Comment', foreground => 'darkgrey', -font => [-slant => 'italic']],
-	['CommentVar', -foreground => 'darkgrey', -font => [-slant => 'italic']],
-	['Constant', -foreground => 'blue', -font => [-weight => 'bold']],
-	['ControlFlow', -foreground => 'darkblue'],
-	['DataType', -foreground => 'blue'],
-	['DecVal', -foreground => 'darkblue', -font => [-weight => 'bold']],
-	['Documentation', -foreground => 'beige', -font => [-slant => 'italic']],
-	['Error',  -background => 'red', -foreground => 'yellow'],
-	['Extension', -foreground => 'violet'],
-	['Float', -foreground => 'darkblue', -font => [-weight => 'bold']],
-	['Function', -foreground => 'green'],
-	['Import', -foreground => 'red'],
-	['Information', foreground => 'darkgrey', -font => [-weight => 'bold']],
-	['Keyword', -foreground => 'brown'],
-	['Normal', ],
-	['Operator', -foreground => 'orange', -background  => 'beige'],
-	['Others', -foreground => 'orange'],
-	['Preprocessor', ],
-	['RegionMarker', -background => 'lightblue'],
-	['SpecialChar', -foreground => 'purple', -background => 'beige'],
-	['SpecialString', -foreground => 'orange'],
-	['String', -foreground => 'red'],
-	['Variable', -foreground => 'blue', -background => 'lightgreen'],
-	['VerbatimString', -foreground => 'orange', -font => [-weight => 'bold']],
-	['Warning', -background => 'yellow', -foreground => 'darkred'],
+	'Alert' => [-background => '#DB7C47', -foreground => '#FFFFFF'],
+	'Annotation' => [-foreground => '#5A5A5A'],
+	'Attribute' => [-foreground => '#00B900', -weight => 'bold'],
+	'BaseN' => [-foreground => '#0000A9'],
+	'BuiltIn' => [-foreground => '#B500E6'],
+	'Char' => [-foreground => '#FF00FF'],
+	'Comment' => [foreground => '#5A5A5A', -slant => 'italic'],
+	'CommentVar' => [-foreground => '#5A5A5A', -slant => 'italic', -weight => 'bold'],
+	'Constant' => [-foreground => '#0000FF', -weight => 'bold'],
+	'ControlFlow' => [-foreground => '#0062AD'],
+	'DataType' => [-foreground => '#0080A8', -weight => 'bold'],
+	'DecVal' => [-foreground => '#9C4E2B'],
+	'Documentation' => [-foreground => '#7F5A41', -slant => 'italic'],
+	'Error' => [-background => '#FF0000', -foreground => '#FFFF00'],
+	'Extension' => [-foreground => '#9A53D1'],
+	'Float' => [-foreground => '#9C4E2B', -weight => 'bold'],
+	'Function' => [-foreground => 'green'],
+	'Import' => [-foreground => '#950000', -slate => 'italic'],
+	'Information' => [foreground => '#5A5A5A', -weight => 'bold'],
+	'Keyword' => [-weight => 'bold'],
+	'Normal' => [],
+	'Operator' => [-foreground => '#85530E'],
+	'Others' => [-foreground => '#FF6200'],
+	'Preprocessor' => [-slant => 'italic'],
+	'RegionMarker' => [-background => '#00CFFF'],
+	'SpecialChar' => [-foreground => '#9A53D1'],
+	'SpecialString' => [-foreground => '#FF4449'],
+	'String' => [-foreground => '#FF0000'],
+	'Variable' => [-foreground => '#0000FF', -weight => 'bold'],
+	'VerbatimString' => [-foreground => '#FF4449', -weight => 'bold'],
+	'Warning' => [-background => '#FFFF00', -foreground => '#FF0000'],
 );
 
 my $minusimg = '#define indicatorclose_width 11
@@ -126,6 +172,8 @@ static unsigned char indicatoropen_bits[] = {
 
 =item Switch: B<-modifycall>
 
+=item Switch: B<-scrollbars>
+
 =item Switch: B<-updatecall>
 
 =back
@@ -140,6 +188,14 @@ static unsigned char indicatoropen_bits[] = {
 
 sub Populate {
 	my ($self,$args) = @_;
+	
+	my $scrollbars = delete $args->{'-scrollbars'};
+	$scrollbars = 'osoe' unless defined $scrollbars;
+	my $theme = delete $args->{'-theme'};
+	unless (defined $theme) {
+		$theme = Tk::CodeText::Theme->new;
+		$theme->put(@defaultattributes);
+	}
 
 	$self->SUPER::Populate($args);
 
@@ -161,6 +217,7 @@ sub Populate {
 	$self->{POSTCONFIG} = 0;
 	$self->{STATUSVISIBLE} = 0;
 	$self->{SYNTAX} = 'None';
+	$self->{THEME} = $theme;
 	
 	#create editor frame
 	my $ef = $self->Frame(
@@ -185,7 +242,7 @@ sub Populate {
 	my $text = $ef->Scrolled('XText',
 		-relief => 'flat',
 		-modifycall => ['modifiedCheck', $self],
-		-scrollbars => 'osoe',
+		-scrollbars => $scrollbars,
 	)->pack(-side => 'left', -expand =>1, -fill => 'both');
 
 	#create the statusbar
@@ -205,7 +262,6 @@ sub Populate {
 	$l->destroy;
 
 	$self->ConfigSpecs(
-		-attributes => [qw/METHOD attributes Attributes/,  \@defaultattributes],
 		-autoindent => [qw/PASSIVE autoindent Autoindent/, 0],
 		-commentchar => '-commentstart', #depricated
 		-configdir => [qw/PASSIVE configdir ConfigDir/, ''],
@@ -224,6 +280,7 @@ sub Populate {
 		-shownumbers => [qw/METHOD showNumers ShowNumbers/, 1],
 		-showstatus => [qw/METHOD showStatus ShowStatus/, 1],
 		-syntax => [qw/METHOD syntax Syntax/, 'None'],
+		-themefile => ['METHOD'],
 		DEFAULT => [ $text ],
 	);
 
@@ -238,16 +295,31 @@ sub Populate {
 	$yscroll->configure(
 		-command => sub {
 			$scrollcommand->Call(@_);
-			$self->contentCheck;
+			$self->contentCheckLight;
 		}
 	);
 
-	my @events = qw(
-		Expose Visibility Configure
-		KeyPress ButtonPress ButtonRelease-1 
-		Return ButtonRelease-2 B2-Motion 
+	#configure all the bindings for the text widget
+	$text->bind('<KeyPress>', [$self, 'OnKeyPress', Ev('K') ]);
+	#lazy events
+	my @levents = qw(
+		ButtonPress ButtonRelease-1 
+		ButtonRelease-2 B2-Motion 
 		B1-Motion MouseWheel
 	);
+	foreach my $levent (@levents) {
+		my $bindsub = $text->bind("<$levent>");
+		if ($bindsub) {
+			$text->bind("<$levent>", sub {
+				$bindsub->Call;
+				$self->contentCheckLight;
+			});
+		} else {
+			$text->bind( "<$levent>", sub { $self->contentCheckLight } );
+		}
+	}
+	#forced events
+	my @events = qw(Expose Visibility Configure Return);
 	foreach my $event (@events) {
 		my $bindsub = $text->bind("<$event>");
 		if ($bindsub) {
@@ -261,61 +333,9 @@ sub Populate {
 	}
  	$self->after(1, sub {
 		$self->{POSTCONFIG} = 1;
+		$self->themeUpdate;
 		$self->lnumberCheck;
  	});
-}
-
-sub attributes {
-	my $self = shift;
-	if (@_) {
-		$self->{ATTRIBUTES} = shift;
-		#the ->after is necessary here, at create time the widget would not yet return the
-		#correct font information to configure the attributes correctly.
-		#TODO: find a solution for this.
-		$self->after(1, ['attributesConfigure', $self]);
-		
-	}
-	return $self->{ATTRIBUTES};
-}
-
-sub attributesConfigure {
-	my $self = shift;
-	my $new = $self->{ATTRIBUTES};
-
-	my @tags = $self->tags;
-	#clear all tags
-	for (@tags) {
-		$self->tagDelete($_)
-	}
-	#setup attributes
-	foreach my $r (@$new) {
-		my @raw = @$r;
-		my $tagname = shift @raw;
-		#check for valid tagname
-		my $hit = grep({ $_ eq $tagname} @tags);
-		if ($hit) {
-			my %opt = (@raw);
-			if (exists $opt{'-font'}) {
-				my $f = $opt{'-font'};
-				$opt{'-font'} = $self->attributesFontCompose($f);
-			}
-			$self->tagConfigure($tagname, %opt);
-		}
-	}
-}
-
-sub attributesFontCompose {
-	my ($self, $l) = (@_);
-	my @fat = qw(-family -overstrike -size -slant -underline -weight);
-	my $deffont = $self->Subwidget('XText')->getFontInfo;
-	my %fopt = (@$l);
-	foreach my $att (@fat) {
-		unless (exists $fopt{$att}) {
-			$fopt{$att} = $deffont->{$att};
-		}
-	}
-	my @res = (%fopt);
-	return \@res;
 }
 
 sub clear {
@@ -340,6 +360,15 @@ sub contentCheck {
 	my $self = shift;
 	$self->lnumberCheck;
 	$self->foldsCheck;
+}
+
+sub contentCheckLight {
+	my $self = shift;
+	my $nimf = $self->{NUMBERINF};
+	my $size = @$nimf;
+	my $start = $nimf->[0]->cget('-text');
+	my $end = $nimf->[$size - 1]->cget('-text');
+	$self->contentCheck if (($start ne $self->visualBegin) or ($end ne $self->visualEnd));
 }
 
 sub foldButton {
@@ -493,6 +522,24 @@ sub foldsClear {
 		};
 		$count ++;
 	}
+}
+
+sub fontCompose {
+	my ($self, $font, %options) = @_;
+	my $family = $self->fontActual($font, '-family');
+	my $size = $self->fontActual($font, '-size');
+	my $weight = '';
+	my $slant = '';
+	$slant = $options{'-slant'} if exists $options{'-slant'};
+	$weight = $options{'-weight'} if exists $options{'-weight'};
+	$slant = 'roman' if $slant eq '';
+	$weight = 'normal' if $weight eq '';
+	return $self->Font(
+		-family => $family,
+		-size => $size,
+		-slant => $slant,
+		-weight => $weight,
+	);
 }
 
 sub hideLine {
@@ -664,6 +711,16 @@ sub lnumberCheck {
 	}
 }
 
+sub load{
+	my ($self, $file) = @_;
+	if ($self->Subwidget('XText')->load($file)) {
+		my $syntax = $self->Kamelon->SuggestSyntax($file);
+		$self->configure(-syntax => $syntax) if defined $syntax;
+		return 1
+	}
+	return 0
+}
+
 sub LoopActive {
 	my $self = shift;
 	$self->{LOOPACTIVE} = shift if @_;
@@ -680,6 +737,15 @@ sub NoHighlighting {
 	my $self = shift;
 	$self->{NOHIGHLIGHTING} = shift if @_;
 	return $self->{NOHIGHLIGHTING}
+}
+
+sub OnKeyPress {
+	my ($self, $key) = @_;
+	if (length($key) > 1) {
+		$self->contentCheckLight;
+	} else {
+		$self->contentCheck;
+	}
 }
 
 sub showfolds {
@@ -762,10 +828,15 @@ sub syntax {
 		);
 		unless ($new eq 'None') {
 			$kam->Syntax($new);
+			my $idx = $kam->GetIndexer;
+			$self->Subwidget('XText')->configure(
+				-mlcommentend => $idx->InfoMLCommentEnd($new),
+				-mlcommentstart => $idx->InfoMLCommentStart($new),
+				-slcomment => $idx->InfoSLComment($new),
+			);
 			$self->NoHighlighting(0);
 			$self->Colored(0);
 			$self->ColorInf([ [$kam->StateGet] ]);
-			my $idx = $kam->GetIndexer;
 			$self->highlightLoop unless $self->LoopActive;
 		}
 		$self->{SYNTAX} = $new;
@@ -775,6 +846,53 @@ sub syntax {
 
 sub tags {
 	return $_[0]->Kamelon->AvailableAttributes
+}
+
+sub theme {
+	return $_[0]->{THEME}
+}
+
+sub themefile {
+	my $self = shift;
+	if (@_) {
+		my $file = shift;
+		if ((defined $file) and (-e $file)) {
+			$self->theme->load($file);
+			#the ->after is necessary here, at create time the widget would not yet return the
+			#correct font information to configure the tags correctly.
+			#TODO: find a solution for this.
+			$self->after(1, ['themeUpdate', $self]);;
+		}
+		$self->{THEMEFILE} = $file;
+	}
+	return $self->{THEMEFILE};
+}
+
+sub themeUpdate {
+	my $self = shift;
+	my $theme = $self->theme;
+	my @values = $theme->get;
+	my $font = $self->cget('-font');
+	my $bg = $self->cget('-background');
+	my $fg = $self->cget('-foreground');
+	for ($theme->tagList) { $self->tagDelete($_) }
+	while (@values) {
+		my $tag = shift @values;
+		my $options = shift @values;
+		my %opt = @$options;
+		my $nbg = $bg;
+		my $nfg = $fg;
+		my $nfont = $font;
+		$nbg = $opt{'-background'} if exists $opt{'-background'};
+		$nfg = $opt{'-foreground'} if exists $opt{'-foreground'};
+		$nfont = $self->fontCompose($nfont, -slant => $opt{'-slant'}) if exists $opt{'-slant'};
+		$nfont = $self->fontCompose($nfont, -weight => $opt{'-weight'}) if exists $opt{'-weight'};
+		$self->tagConfigure($tag,
+			-background => $nbg,
+			-foreground => $nfg,
+			-font => $nfont,
+		);
+	}
 }
 
 sub ViewMenuItems {
