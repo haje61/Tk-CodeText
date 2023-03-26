@@ -170,6 +170,11 @@ sub save {
 			my $tag = shift @values;
 			print OFILE "[$tag]\n";
 			my $options = shift @values;
+			while (@$options) {
+				my $key = shift @$options;
+				my $value = shift @$options;
+				print OFILE "$key=$value\n";
+			}
 		}
 		close OFILE
 	} else {

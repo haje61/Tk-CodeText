@@ -179,6 +179,12 @@ sub get {
 	return $self->Theme->get;
 }
 
+sub load {
+	my $self = shift;
+	$self->Theme->load(@_);
+	$self->updateAll;
+}
+
 sub put {
 	my $self = shift;
 	my $theme = $self->Theme;
@@ -192,6 +198,12 @@ sub put {
 		my $weight = $self->Subwidget($tag . 'W');
 		$$weight = $theme->getItem($tag, '-weight');
 	}
+	$self->updateAll;
+}
+
+sub save {
+	my $self = shift;
+	$self->Theme->save(@_);
 }
 
 sub updateAll {

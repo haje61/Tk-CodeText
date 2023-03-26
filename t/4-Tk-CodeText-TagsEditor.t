@@ -28,7 +28,7 @@ my @defaultattributes = (
 	'Error' => [-background => '#FF0000', -foreground => '#FFFF00'],
 	'Extension' => [-foreground => '#9A53D1'],
 	'Float' => [-foreground => '#9C4E2B', -weight => 'bold'],
-	'Function' => [-foreground => 'green'],
+	'Function' => [-foreground => '#008A00'],
 	'Import' => [-foreground => '#950000', -slate => 'italic'],
 	'Information' => [foreground => '#5A5A5A', -weight => 'bold'],
 	'Keyword' => [-weight => 'bold'],

@@ -12,6 +12,7 @@ WriteMakefile(
 		'Syntax::Kamelon' => '0.21',
 		'Test::Tk' => '2.00',
 		'Tk' => '800.024',
+		'Tk::ColorEntry' => '0.02',
 		'Tk::PopList' => '0.02',
 	},
 	ABSTRACT_FROM => "lib/Tk/$pm.pm",

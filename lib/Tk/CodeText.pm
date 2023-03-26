@@ -88,10 +88,13 @@ use base qw(Tk::Derived Tk::Frame);
 
 use Syntax::Kamelon;
 use Tk;
-require Tk::XText;
-require Tk::Font;
+
 require Tk::CodeText::StatusBar;
+require Tk::CodeText::TagsEditor;
 require Tk::CodeText::Theme;
+require Tk::DialogBox;
+require Tk::Font;
+require Tk::XText;
 
 
 Construct Tk::Widget 'CodeText';
@@ -113,7 +116,7 @@ my @defaultattributes = (
 	'Error' => [-background => '#FF0000', -foreground => '#FFFF00'],
 	'Extension' => [-foreground => '#9A53D1'],
 	'Float' => [-foreground => '#9C4E2B', -weight => 'bold'],
-	'Function' => [-foreground => 'green'],
+	'Function' => [-foreground => '#008A00'],
 	'Import' => [-foreground => '#950000', -slate => 'italic'],
 	'Information' => [foreground => '#5A5A5A', -weight => 'bold'],
 	'Keyword' => [-weight => 'bold'],
@@ -852,6 +855,51 @@ sub theme {
 	return $_[0]->{THEME}
 }
 
+sub themeDialog {
+	my $self = shift;
+	my $theme = $self->theme;
+	my $dialog = $self->DialogBox(
+		-buttons => ['Ok', 'Cancel'],
+		-default_button => 'Ok',
+		-cancel_button => 'Cancel',
+	);
+	my $editor = $dialog->add('TagsEditor',
+		-relief => 'sunken',
+		-borderwidth => 2,
+		-widget => $self,
+	)->pack(-expand => 1, -fill => 'both', -padx => 2, -pady => 2);
+	my $toolframe =  $dialog->add('Frame',
+	)->pack(-fill => 'x');
+	$toolframe->Button(
+		-command => sub {
+			my $file = $self->getSaveFile;
+			$editor->save($file) if defined $file;
+		},
+		-text => 'Save',
+	)->pack(-side => 'left', -padx => 5, -pady => 5);
+	$toolframe->Button(
+		-text => 'Load',
+		-command => sub {
+			my $file = $self->getOpenFile;
+			if (defined $file) {
+				my $obj = Tk::CodeText::Theme->new;
+				$obj->load($file);
+				$editor->put($obj->get);
+				$editor->updateAll
+			}
+		},
+	)->pack(-side => 'left', -padx => 5, -pady => 5);
+	
+	$editor->put($theme->get);
+	my $button = $dialog->Show(-popover => $self);
+	if ($button eq 'Ok') {
+		$theme->put($editor->get);
+		$self->themeUpdate;
+		$self->highlightPurge;
+	}
+	$dialog->destroy;
+}
+
 sub themefile {
 	my $self = shift;
 	if (@_) {
@@ -908,10 +956,11 @@ sub ViewMenuItems {
 	my @values = (-onvalue => 1, -offvalue => 0);
 	my $items = $self->Subwidget('XText')->ViewMenuItems;
 	push @$items,
+		[command => "Colors", -command => [themeDialog => $self]],
 		'separator',
-		[checkbutton => "Show code folds", @values, -variable => \$f],
-		[checkbutton => "Show line numbers", @values, -variable => \$n],
-		[checkbutton => "Show status bar", @values, -variable => \$s];
+		[checkbutton => 'Show code folds', @values, -variable => \$f],
+		[checkbutton => 'Show line numbers', @values, -variable => \$n],
+		[checkbutton => 'Show status bar', @values, -variable => \$s];
 	return $items
 }
 
