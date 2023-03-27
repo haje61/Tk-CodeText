@@ -68,6 +68,8 @@ sub Populate {
 	$self->{BUFFERMODIFIED} = 0;
 	$self->{BUFFERSTART} = '1.0';
 	$self->{BUFFERREPLACE} = '';
+	$self->{REDOSTACK} = [];
+	$self->{UNDOSTACK} = [];
 
 	$self->ResetRedo;
 	$self->ResetUndo;
@@ -102,7 +104,7 @@ sub Populate {
 sub Backspace {
 	my $self = shift;
 	if ($self->compare('insert','!=','1.0')) { #We are not at the start of the text
-		$self->RecordUndo('backspace');
+		$self->RecordUndo('backspace', $self->editModified);
 		if ($self->selectionExists) {
 			$self->SUPER::delete('sel.first','sel.last');
 		} else {
@@ -147,7 +149,7 @@ sub BufferStart {
 =cut
 
 sub canUndo {
-	my $stack = $_[0]->{UNDOSTACK};
+	my $stack = $_[0]->UndoStack;
 	return (@$stack > 0)
 }
 
@@ -156,7 +158,7 @@ sub canUndo {
 =cut
 
 sub canRedo {
-	my $stack = $_[0]->{REDOSTACK};
+	my $stack = $_[0]->RedoStack;
 	return (@$stack > 0)
 }
 
@@ -194,6 +196,17 @@ sub clear {
 	$self->Callback('-modifycall', '1.0');
 }
 
+sub clearModified {
+	my $self = shift;
+	$self->editModified(0);
+	$self->Flush;
+	$self->BufferModified(0);
+	my $r = $self->RedoStack;
+	for (@$r) { $_->{'modified'} = 1 }
+	my $u = $self->UndoStack;
+	for (@$u) { $_->{'modified'} = 1 }
+}
+
 =item B<comment>
 
 =cut
@@ -203,6 +216,7 @@ sub comment {
 	my $slstart = $self->cget('-slcomment');
 	my $mlend = $self->cget('-mlcommentend');
 	my $mlstart = $self->cget('-mlcommentstart');
+	my $modified = $self->editModified;
 	if ($self->CommentType eq 'multi') {
 		#multi line operation
 		if ((defined $mlend) and (defined $mlstart)) {
@@ -215,7 +229,7 @@ sub comment {
 			my $new = $self->get($rb, $re);
 			$self->unselectAll;
 			$self->tagAdd('sel',$rb, $re);
-			$self->RecordUndo('replace', $rb, $old, $new);
+			$self->RecordUndo('replace', $modified, $rb, $old, $new);
 			$self->Callback('-modifycall', $rb);
 		} elsif (defined $slstart) { 
 			$self->selectionModify($slstart, 0)		
@@ -232,7 +246,7 @@ sub comment {
 			$self->SUPER::insert($begin, $mlstart);
 		}
 		my $new = $self->get($begin, "$begin lineend");
-		$self->RecordUndo('replace', $begin, $old, $new);
+		$self->RecordUndo('replace', $modified, $begin, $old, $new);
 		$self->Callback('-modifycall', $begin);
 	}
 }
@@ -253,7 +267,7 @@ sub delete {
 	my $begin = $_[0];
 	$begin = 'insert' unless defined $begin;
 	my $string = $self->get(@_);
-	$self->RecordUndo('delete', $begin, $string);
+	$self->RecordUndo('delete', $self->editModified, $begin, $string);
 	$self->SUPER::delete(@_);
 	$self->Callback('-modifycall', $begin);
 }
@@ -333,11 +347,11 @@ sub Flush {
 		my $start = $self->BufferStart;
 		my $bmod = $self->BufferModified;
 		if ($mode eq 'backspace') {
-			$self->PushUndoRaw('delete', $start, $buf, $bmod);
+			$self->PushUndoRaw('delete', $bmod, $start, $buf);
 		} elsif ($mode eq 'replace') {
-			$self->PushUndoRaw($mode, $start, $buf, $rbuf, $bmod);
+			$self->PushUndoRaw($mode, $bmod, $start, $buf, $rbuf);
 		} else {
-			$self->PushUndoRaw($mode, $start, $buf, $bmod);
+			$self->PushUndoRaw($mode, $bmod, $start, $buf);
 		}
 		$self->Buffer('');
 		$self->BufferReplace('');
@@ -416,9 +430,9 @@ sub indent {
 	} else {
 		my $begin = $self->index('insert linestart');
 		my $old = $self->get($begin, "$begin lineend");
+		my $new = $ichar . $old;
+		$self->RecordUndo('replace', $self->editModified, $begin, $old, $new);
 		$self->SUPER::insert($begin, $ichar);
-		my $new = $self->get($begin, "$begin lineend");
-		$self->RecordUndo('replace', $begin, $old, $new);
 		$self->Callback('-modifycall', $begin);
 	}
 }
@@ -441,7 +455,7 @@ sub indentString {
 sub insert {
 	my ($self, $pos, $string) = @_;
 	$pos = $self->index($pos);
-	$self->RecordUndo('insert', $pos, $string);
+	$self->RecordUndo('insert', $self->editModified,$pos, $string);
 	$self->SUPER::insert($pos, $string);
 	$self->Callback('-modifycall', $pos);
 }
@@ -453,7 +467,7 @@ sub InsertKeypress {
 	if ($self->OverstrikeMode) {
 		my $current = $self->get('insert');
 		$current = '' if $current eq "\n";
-		$self->RecordUndo('replace', $index, $current, $char);
+		$self->RecordUndo('replace', $self->editModified, $index, $current, $char);
 		$self->SUPER::delete($index) unless $current eq '';
 		$self->SUPER::insert($index, $char);
 		$self->Callback('-modifycall', $index);
@@ -610,25 +624,24 @@ sub PostPopupMenu {
 
 sub PullUndo {
 	my $self = shift;
-	my $stack = $self->{UNDOSTACK};
+	my $stack = $self->UndoStack;
 	return shift(@$stack);
 }
 
 sub PullRedo {
 	my $self = shift;
-	my $stack = $self->{REDOSTACK};
+	my $stack = $self->RedoStack;
 	return shift(@$stack);
 }
 
 sub PushUndo {
 	my $self = shift;
-	my $stack = $self->{UNDOSTACK};
+	my $stack = $self->UndoStack;
 	unshift(@$stack, @_);
 }
 
 sub PushUndoRaw {
-	my ($self, $mode, @content, $modified) = @_;
-
+	my ($self, $mode, $modified, @content) = @_;
 	my %undo = (
 		content => \@content,
 		mode => $mode,
@@ -637,21 +650,19 @@ sub PushUndoRaw {
 
 	my @ranges = $self->tagRanges('sel');
 	$undo{'selection'} = \@ranges if (@ranges eq 2);
-	
-# 	$undo{'remod'} = 1 unless $modified;
 
 	$self->PushUndo(\%undo);
 }
 
 sub PushRedo {
 	my $self = shift;
-	my $stack = $self->{REDOSTACK};
+	my $stack = $self->RedoStack;
 	unshift(@$stack, @_);
 }
 
 sub RecordUndo {
-	my ($self, $mode, @content) = @_;
-
+	my ($self, $mode, $modified, @content) = @_;
+	
 	$self->ResetRedo;
 
 	if ($mode eq 'backspace') {
@@ -659,7 +670,7 @@ sub RecordUndo {
 			$self->Flush;
 			my @ranges = $self->tagRanges('sel');
 			my $text = $self->get(@ranges);
-			$self->PushUndoRaw('delete', $ranges[0], $text, $self->editModified);
+			$self->PushUndoRaw('delete', $modified, $ranges[0], $text);
 		} else {
 			my $bufmode = $self->BufferMode;
 			$self->Flush if $mode ne $bufmode;
@@ -683,7 +694,7 @@ sub RecordUndo {
 
 		if (length($text) > 1) {
 			$self->Flush;
-			$self->PushUndoRaw($mode, $pos, $text, $self->editModified);
+			$self->PushUndoRaw($mode, $modified, $pos, $text);
 		} else {
 			my $bufmode = $self->BufferMode;
 			$self->Flush if $mode ne $bufmode;
@@ -701,7 +712,7 @@ sub RecordUndo {
 
 		if ((length($new) > 1) or ($self->selectionExists)) {
 			$self->Flush;
-			$self->PushUndoRaw($mode, $pos, $old, $new, $self->editModified);
+			$self->PushUndoRaw($mode, $modified, $pos, $old, $new);
 		} else {
 			my $bufmode = $self->BufferMode;
 			$self->Flush if $mode ne $bufmode;
@@ -762,11 +773,9 @@ sub redo {
 	}
 }
 
-# sub RedoStackSize {
-# 	my $stack = $_[0]->{REDOSTACK};
-# 	my $size = @$stack;
-# 	return $size;
-# }
+sub RedoStack {
+	return $_[0]->{REDOSTACK}
+}
 
 sub ReplaceSelectionsWith {
 	my ($self,$new_text ) = @_;
@@ -791,7 +800,7 @@ sub ReplaceSelectionsWith {
 		$last = $self->index('mark_sel_'.($i+1));
 
 		my $old = $self->get($first, $last);
-		$self->RecordUndo('replace', $first, $old, $new_text);
+		$self->RecordUndo('replace', $self->editModified, $first, $old, $new_text);
 		$self->SUPER::insert($last, $new_text);
 		$self->SUPER::delete($first, $last);
 		$self->Callback('-modifycall', $first);
@@ -847,7 +856,7 @@ sub save {
 	}
 	$self->Callback('-updatecall', 100);
 	close OUTFILE;
-	$self->editModified(0);
+	$self->clearModified;
 	return 1
 }
 
@@ -879,6 +888,7 @@ sub selectionModify {
 	my $end = $self->index($ranges[1]);
 	my $len = length($char);
 	my $old = $self->get(@ranges);
+	my $modified = $self->editModified;
 	while ($self->compare($start, "<", $end)) {
 		if ($mode) {
 			if ($self->get("$start linestart", "$start linestart + $len chars") eq $char) {
@@ -892,7 +902,7 @@ sub selectionModify {
 	$self->unselectAll;
 	$self->tagAdd('sel', @ranges);
 	my $new = $self->get(@ranges);
-	$self->RecordUndo('replace', $ranges[0], $old, $new);
+	$self->RecordUndo('replace', $modified, $ranges[0], $old, $new);
 	$self->Callback('-modifycall', $ranges[0]);
 # 	$self->tagAdd('sel', @ranges);
 }
@@ -908,6 +918,7 @@ sub uncomment {
 	my $mlend = $self->cget('-mlcommentend');
 	my $lend = length($mlend) if defined $mlend;
 	my $lstart = length($mlstart) if defined $mlstart;
+	my $modified = $self->editModified;
 	if ($self->CommentType eq 'multi') {
 		my ($rb, $re) = $self->tagRanges('sel');
 		$rb = $self->index("$rb linestart");
@@ -920,7 +931,7 @@ sub uncomment {
 				my $new = $self->get($rb, $re);
 				$self->unselectAll;
 				$self->tagAdd('sel', $rb, $re);
-				$self->RecordUndo('replace', $rb, $old, $new);
+				$self->RecordUndo('replace', $modified, $rb, $old, $new);
 				$self->Callback('-modifycall', $rb);
 			}
 		} elsif (defined $slstart) {
@@ -940,7 +951,7 @@ sub uncomment {
 			}
 		}
 		my $new = $self->get($rb, "$rb lineend");
-		$self->RecordUndo('replace', $rb, $old, $new);
+		$self->RecordUndo('replace', $modified, $rb, $old, $new);
 		$self->Callback('-modifycall', $rb);
 	}
 }
@@ -991,6 +1002,11 @@ sub undo {
 	}
 }
 
+sub UndoStack {
+	return $_[0]->{UNDOSTACK}
+}
+
+
 =item B<unindent>
 
 =cut
@@ -1001,6 +1017,7 @@ sub unindent {
 	if ($self->selectionExists) {
 		$self->selectionModify($ichar, 1);
 	} else {
+		my $modified = $self->editModified;
 		my $index = $self->index('insert');
 		my $start = $self->index('insert linestart');
 		my $len = length($ichar);
@@ -1010,7 +1027,7 @@ sub unindent {
 			$self->SUPER::delete($start, "$start + $len" . "c");
 		}
 		my $new = $self->get($start, "$start lineend");
-		$self->RecordUndo('replace', $start, $old, $new);
+		$self->RecordUndo('replace', $modified, $start, $old, $new);
 		$self->Callback('-modifycall', $start);
 	}
 }

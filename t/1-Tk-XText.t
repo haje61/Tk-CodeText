@@ -121,7 +121,10 @@ if (defined $app) {
 	)->pack(-side => 'left', -pady => 2);
 	$sb->Button(
 		-text=> 'Clear modified', 
-		-command => ['editModified', $text, 0], 
+		-command => sub {
+			$text->clearModified(0);
+			&tmodified;
+		}
 	)->pack(-side => 'left', -pady => 2);
 	$sb->Button(
 		-text=> 'Load Ref file',
@@ -133,9 +136,9 @@ if (defined $app) {
 
 sub tmodified {
 	$utext->delete('1.0', 'end');
-	$utext->insert('end', Dumper $text->{UNDOSTACK});
+	$utext->insert('end', Dumper $text->UndoStack);
 	$rtext->delete('1.0', 'end');
-	$rtext->insert('end', Dumper $text->{REDOSTACK});
+	$rtext->insert('end', Dumper $text->RedoStack);
 	$btext->delete('1.0', 'end');
 	my $buf = $text->Buffer;
 	my $bstart = $text->BufferStart;
@@ -165,7 +168,7 @@ my $commentsel2 = "<<-one\ntwo\n->>";
 my $init = [ sub { 
 	$text->clear; 
 	$text->insert('1.0', $original);
-	$text->editModified(0);
+	$text->clearModified(0);
 	return $text->get('1.0', 'end - 1c');
 }, $original, 'Initialise with original text'];
 my $ismodified = [ sub { return ($text->editModified >= 1) }, 1, 'Is modified'];
@@ -524,16 +527,18 @@ push @tests, (
 	[ sub {
 		$text->undo;
 		$text->undo;
+		$text->undo;
 		return gettext;
-	}, $firstline, 'Undo x2, Simple undo' ],
+	}, '', 'Undo x3, Simple undo' ],
 
 	$isnotmodified,
 
 	[ sub {
 		$text->redo;
 		$text->redo;
+		$text->redo;
 		return gettext;
-	}, $original, 'Redo x2, Simple redo' ],
+	}, $original, 'Redo x3, Simple redo' ],
 
 	$ismodified,
 	#backspace key buffering 1

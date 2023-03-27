@@ -221,6 +221,8 @@ sub Populate {
 	$self->{STATUSVISIBLE} = 0;
 	$self->{SYNTAX} = 'None';
 	$self->{THEME} = $theme;
+	$self->{SAVEFIRSTVISIBLE} = '1.0';
+	$self->{SAVELASTVISIBLE} = '1.0';
 	
 	#create editor frame
 	my $ef = $self->Frame(
@@ -367,10 +369,8 @@ sub contentCheck {
 
 sub contentCheckLight {
 	my $self = shift;
-	my $nimf = $self->{NUMBERINF};
-	my $size = @$nimf;
-	my $start = $nimf->[0]->cget('-text');
-	my $end = $nimf->[$size - 1]->cget('-text');
+	my $start = $self->SaveFirstVisible;
+	my $end = $self->SaveLastVisible;
 	$self->contentCheck if (($start ne $self->visualBegin) or ($end ne $self->visualEnd));
 }
 
@@ -665,14 +665,17 @@ sub lnumberCheck {
 	my $self = shift;
 
 	return unless $self->{POSTCONFIG};
+
+	my $line = $self->visualBegin;
+	my $last = $self->visualEnd;
+	$self->SaveFirstVisible($line);
+	$self->SaveLastVisible($line);
+
 	return unless $self->cget('-shownumbers');
 
 	my $widget = $self->Subwidget('XText');
 	my $count = 0;
 	my $font = $widget->cget('-font');
-
-	my $line = $self->visualBegin;
-	my $last = $self->visualEnd;
 
 	my $nimf = $self->{NUMBERINF};
 	my $numframe = $self->Subwidget('Numbers');
@@ -749,6 +752,18 @@ sub OnKeyPress {
 	} else {
 		$self->contentCheck;
 	}
+}
+
+sub SaveFirstVisible {
+	my $self = shift;
+	$self->{SAVEFIRSTVISIBLE} = shift if @_;
+	return $self->{SAVEFIRSTVISIBLE}
+}
+
+sub SaveLastVisible {
+	my $self = shift;
+	$self->{SAVELASTVISIBLE} = shift if @_;
+	return $self->{SAVELASTVISIBLE}
 }
 
 sub showfolds {

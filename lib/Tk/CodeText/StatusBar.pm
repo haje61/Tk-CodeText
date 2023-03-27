@@ -238,45 +238,69 @@ sub Populate {
 	$self->SUPER::Populate($args);
 
 	my $indent = '';
-	my $lines = '';
-	my $pos = '';
-	my $ovr = '';
-	my $size = '';
+	my $info = '';
 	my $syntax = 'None';
 	my $tabs = '';
 	$self->{INDENT} = \$indent;
-	$self->{LINES} = \$lines;
-	$self->{POS} = \$pos;
-	$self->{OVR} = \$ovr;
-	$self->{SIZE} = \$size;
+	$self->{INFO} = \$info;
 	$self->{SYNTAX} = \$syntax;
 	$self->{TABS} = \$tabs;
 
 	my @pack = (-side => 'left', -padx => 2, -pady => 2);
+
 	#modified indicator
 	my $modlab = $self->Label(
 	);
-	$self->Advertise('Modified', $modlab);
+	$self->Advertise(Modified => $modlab);
 
-	#position
-	$self->Label(
-		-textvariable => \$pos, 
+	#info
+	my $l = $self->Label(
+		-textvariable => \$info, 
 	)->pack(@pack);
+	$self->Advertise(Info => $l);
 
-	#number of lines
-	$self->Label(
-		-textvariable => \$lines, 
-	)->pack(@pack);
+	#Syntax
+	my $sl;
+	my $sb = $self->Button(
+		-command => sub {
+			$self->hideAll;
+			$sl->popUp
+		},
+		-textvariable => \$syntax,
+		-relief => 'flat'
+	)->pack(-side => 'right');
+	$sl = $self->PopList(
+		-relief => 'raised',
+		-borderwidth => 2,
+		-popdirection => 'up',
+		-confine => 1,
+		-filter => 1,
+		-selectcall => sub { $widget->configure(-syntax => shift) },
+		'-values' => [ 'None', $widget->Kamelon->AvailableSyntaxes ],
+		-widget => $sb,
+	);
+	$self->Advertise('Syntax', $sl);
 
-	#Size
-	$self->Label(
-		-textvariable => \$size, 
-	)->pack(@pack);
-	
-	#Ovr
-	$self->Label(
-		-textvariable => \$ovr,
-	)->pack(@pack);
+	#Indent
+	my $i;
+	my $ib = $self->Button(
+		-command => sub {
+			$self->hideAll;
+			$i->Put($widget->cget('-indentstyle'));
+			$i->popUp;
+		},
+		-textvariable => \$indent,
+		-relief => 'flat'
+	)->pack(-side => 'right');
+	$i = $self->PopIndent(
+		-relief => 'raised',
+		-borderwidth => 2,
+		-confine => 1,
+		-popdirection => 'up',
+		-setcall => sub { $widget->configure(-indentstyle => shift) },
+		-widget => $ib,
+	);
+	$self->Advertise('Indent', $i);
 
 	#Tabs
 	my $t;
@@ -288,7 +312,7 @@ sub Populate {
 		},
 		-textvariable => \$tabs,
 		-relief => 'flat'
-	)->pack(-side => 'left');
+	)->pack(-side => 'right');
 	$t = $self->PopTabs(
 		-relief => 'raised',
 		-borderwidth => 2,
@@ -301,51 +325,6 @@ sub Populate {
 	$tab = '' unless defined $tab;
 	$t->Put($tab);
 	$self->Advertise('Tabs', $t);
-
-	#Indent
-	my $i;
-	my $ib = $self->Button(
-		-command => sub {
-			$self->hideAll;
-			$i->Put($widget->cget('-indentstyle'));
-			$i->popUp;
-		},
-		-textvariable => \$indent,
-		-relief => 'flat'
-	)->pack(-side => 'left');
-	$i = $self->PopIndent(
-		-relief => 'raised',
-		-borderwidth => 2,
-		-confine => 1,
-		-popdirection => 'up',
-		-setcall => sub { $widget->configure(-indentstyle => shift) },
-		-widget => $ib,
-	);
-# 	my $istyle = $widget->cget('-indentstyle');
-# 	$i->Put($istyle);
-	$self->Advertise('Indent', $i);
-
-	#Syntax
-	my $sl;
-	my $sb = $self->Button(
-		-command => sub {
-			$self->hideAll;
-			$sl->popUp
-		},
-		-textvariable => \$syntax,
-		-relief => 'flat'
-	)->pack(-side => 'left');
-	$sl = $self->PopList(
-		-relief => 'raised',
-		-borderwidth => 2,
-		-popdirection => 'up',
-		-confine => 1,
-		-filter => 1,
-		-selectcall => sub { $widget->configure(-syntax => shift) },
-		'-values' => [ 'None', $widget->Kamelon->AvailableSyntaxes ],
-		-widget => $sb,
-	);
-	$self->Advertise('Syntax', $sl);
 
 	$self->after(200, ['StatusUpdate', $self]);
 
@@ -371,32 +350,10 @@ sub Indent {
 	return $$l
 }
 
-sub Lines {
+sub Info {
 	my $self = shift;
-	my $l = $self->{LINES};
-	$$l = shift if @_;
-	return $$l
-}
-
-sub Pos {
-	my $self = shift;
-	my $l = $self->{POS};
-	$$l = shift if @_;
-	return $$l
-}
-
-sub Ovr {
-	my $self = shift;
-	my $l = $self->{OVR};
-	$$l = shift if @_;
-	return $$l
-}
-
-sub Size {
-	my $self = shift;
-	my $l = $self->{SIZE};
-	$$l = shift if @_;
-	return $$l
+	my $i = $self->{INFO};
+	$$i = shift if @_;
 }
 
 sub Syntax {
@@ -417,25 +374,31 @@ sub StatusUpdate {
 	my $self = shift;
 	my $text = $self->cget('-widget');
 
+	my $pos = $text->index('insert');
+	$pos =~ /^(\d+)\.(\d+)/;
+	my $line = $1;
+	my $column = $2;
+	my $lines = $text->linenumber('end - 1c');
+	my $size = length($text->get('1.0', 'end - 1c'));
+	my $ovr;
+	if ($text->OverstrikeMode) {
+		$ovr = 'OVERWRITE'
+	} else {
+		$ovr = 'INSERT'
+	}
+	$self->Info("Line $line of $lines, Column $column, Chars $size.   $ovr");
 	$self->Indent('Indent: ' . $text->cget('-indentstyle'));
-	$self->Pos('Pos: ' . $text->index('insert'));
-	$self->Lines('Lines: ' . $text->linenumber('end - 1c'));
-	$self->Size('Size: ' . length($text->get('1.0', 'end - 1c')));
 	$self->Syntax('Syntax: ' . $text->syntax);
 	my $tabs = $text->cget('-tabs');
 	$tabs = '' unless defined $tabs;
 	$self->Tabs("Tabs: $tabs");
 
-	if ($text->OverstrikeMode) {
-			$self->Ovr('OVERWRITE')
-	} else {
-		$self->Ovr('INSERT');
-	}
 
 	my $modlab = $self->Subwidget('Modified');
 	if ($text->editModified) {
 		$modlab->pack(
-			-side => 'right',
+			-before => $self->Subwidget('Info'),
+			-side => 'left',
 			-padx => 2,
 		);
 	} else {
@@ -446,4 +409,5 @@ sub StatusUpdate {
 }
 
 1;
+
 __END__

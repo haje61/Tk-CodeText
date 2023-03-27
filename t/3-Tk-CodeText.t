@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Test::More tests => 13;
+use Test::More tests => 15;
 use Test::Tk;
 use Tk;
 
@@ -53,7 +53,7 @@ $app->configure(-menu => $app->Menu(
 ));
 
 #testing accessors
-my @accessors = qw(Colored ColorInf FoldButtons FoldInf highlightinterval LoopActive NoHighlighting);
+my @accessors = qw(Colored ColorInf FoldButtons FoldInf highlightinterval LoopActive NoHighlighting SaveFirstVisible SaveLastVisible);
 for (@accessors) {
 	my $method = $_;
 	push @tests, [sub {
