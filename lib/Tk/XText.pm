@@ -78,6 +78,7 @@ sub Populate {
 	$self->ConfigSpecs(
 		-autoindent => ['PASSIVE', 'autoIndent', 'AutoIndent', 0],
 		-disablemenu => ['PASSIVE', 'disableMenu', 'Disablemenu', 0],
+		-findandreplacecall => ['PASSIVE'],
 		-indentstyle => ['PASSIVE', undef, undef, "tab"],
 		-match => ['PASSIVE', undef, undef, '[]{}()'],
 		-matchoptions	=> ['METHOD', undef, undef, [-background => 'red', -foreground => 'yellow']],
@@ -89,6 +90,8 @@ sub Populate {
 		-updatelines => ['PASSIVE', undef, undef, 100],
 		DEFAULT => [ 'SELF' ],
 	);
+	$self->eventAdd('<<Find>>', '<F8>');
+	$self->eventAdd('<<Replace>>', '<F9>');
 	$self->eventAdd('<<Indent>>', '<Control-j>');
 	$self->eventAdd('<<UnIndent>>', '<Control-J>');
 	$self->eventAdd('<<Comment>>', '<Control-g>');
@@ -164,6 +167,9 @@ sub canRedo {
 
 sub ClassInit {
 	my ($class,$mw) = @_;
+	$mw->bind($class, '<<Find>>','FindPopUp');
+	$mw->bind($class, '<<Replace>>','FindAndReplacePopUp');
+	$mw->bind($class, '<<Comment>>','comment');
 	$mw->bind($class, '<<Comment>>','comment');
 	$mw->bind($class,'<<UnComment>>','uncomment');
 	$mw->bind($class, '<<Indent>>','indent');
@@ -332,6 +338,17 @@ sub EditMenuItems {
 }
 
 sub EmptyDocument { $_[0]->clear }
+
+sub findandreplacepopup {
+	my $self = shift;
+	my $call = $self->cget('-findandreplacecall');
+	if (defined $call) {
+		&$call(@_);
+	} else {
+		$self->SUPER::findandreplacepopup(@_)
+	}
+}
+
 
 sub FindandReplaceAll {
 	my $self = shift;

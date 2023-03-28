@@ -9,32 +9,7 @@ sub new {
 	my $widget = shift;
 	my $self = $class->SUPER::new(@_);
 	$self->{WIDGET} = $widget;
-	$self->CreateExtIndex;
 	return $self
-}
-
-sub CreateExtIndex {
-	my $self = shift;
-	my $idx = $self->GetIndexer;
-	my $index = $idx->{INDEX};
-	my %eindex = ();
-	for ($idx->AvailableSyntaxes) {
-		my $lang = $_;
-		my $extl = $index->{$lang}->{'ext'};
-		my @o = split(/;/, $extl);
-		for (@o) {
-			my $e = $_;
-			if (exists $eindex{$e}) {
-				my $p = $eindex{$e};
-				push @$p, $lang;
-			} else {
-				$eindex{$e} = [ $lang ];
-			}
-		}
-	}
-	if (%eindex) {
-		$self->{EXTENSIONS} = \%eindex;
-	}
 }
 
 sub ParseResultEndRegion {
@@ -50,19 +25,6 @@ sub ParseResultEndRegion {
 	}
 	my $parser = pop @_;
 	return &$parser($self, @_);
-}
-
-sub SuggestSyntax {
-	my ($self, $file) = @_;
-	my $hsh = $self->{EXTENSIONS};
-	my $ext;
-	if ($file =~ /(\.[^\.]+)$/) {
-		$ext = $1;
-	}
-	return undef unless defined $ext;
-	my $key = "*$ext";
-	return $hsh->{$key}->[0] if exists $hsh->{$key};
-	return undef;
 }
 
 sub Widget { return $_[0]->{WIDGET} }
@@ -221,8 +183,8 @@ sub Populate {
 	$self->{STATUSVISIBLE} = 0;
 	$self->{SYNTAX} = 'None';
 	$self->{THEME} = $theme;
-	$self->{SAVEFIRSTVISIBLE} = '1.0';
-	$self->{SAVELASTVISIBLE} = '1.0';
+	$self->{SAVEFIRSTVISIBLE} = 1;
+	$self->{SAVELASTVISIBLE} = 1;
 	
 	#create editor frame
 	my $ef = $self->Frame(
@@ -245,10 +207,70 @@ sub Populate {
 
 	#create the textwidget
 	my $text = $ef->Scrolled('XText',
-		-relief => 'flat',
+		-width => 20,
+		-height => 10,
+		-findandreplacecall => sub { $self->FindAndOrReplace(@_) },
 		-modifycall => ['modifiedCheck', $self],
+		-relief => 'flat',
 		-scrollbars => $scrollbars,
 	)->pack(-side => 'left', -expand =>1, -fill => 'both');
+	
+	#create the find and replace panel
+	my @pack = (-side => 'left', -padx => 2, -pady => 2);
+	my $sandr = $self->Frame;
+	$self->Advertise(SandR => $sandr);
+
+	#searchframe
+	my $rframe; #the variable for the replaceframe must exist
+	my $sframe = $sandr->Frame->pack(-fill => 'x');
+	$sframe->Label(
+		-anchor => 'e',
+		-text => 'Find',
+		-width => 7,
+	)->pack(@pack);
+	my $find = '';
+	$sframe->Entry(
+		-textvariable => \$find,
+	)->pack(@pack, -expand => 1, -fill => 'x');
+	$sframe->Button(
+		-text => 'Next',
+	)->pack(@pack); 
+	$sframe->Button(
+		-text => 'Previous',
+	)->pack(@pack);
+	my $case = 1;
+	$sframe->Checkbutton(
+		-text => 'Case',
+		-variable => \$case,
+	)->pack(@pack);
+	my $reg = 0;
+	$sframe->Checkbutton(
+		-text => 'Reg',
+		-variable => \$reg,
+	)->pack(@pack);
+	$sframe->Button(
+		-command => ['FindClose', $self],
+		-text => 'Close',
+	)->pack(@pack);
+
+	#replaceframe
+	$rframe = $sandr->Frame;
+	$rframe->Label(
+		-anchor => 'e',
+		-text => 'Replace',
+		-width => 7,
+	)->pack(@pack);
+	$self->Advertise(Replace => $rframe);
+	my $replace = '';
+	$rframe->Entry(
+		-textvariable => \$replace,
+	)->pack(@pack, -expand => 1, -fill => 'x');
+	$rframe->Button(
+		-text => 'Replace',
+	)->pack(@pack); 
+	$rframe->Button(
+		-text => 'Replace all',
+	)->pack(@pack);
 
 	#create the statusbar
 	my $statusbar = $self->StatusBar(
@@ -372,6 +394,30 @@ sub contentCheckLight {
 	my $start = $self->SaveFirstVisible;
 	my $end = $self->SaveLastVisible;
 	$self->contentCheck if (($start ne $self->visualBegin) or ($end ne $self->visualEnd));
+}
+
+sub FindAndOrReplace {
+	my ($self, $flag) = @_;
+	my $geosave = $self->toplevel->geometry;
+	my $sandr = $self->Subwidget('SandR');
+	if ($flag) {
+		$self->Subwidget('Replace')->packForget
+	} else {
+		$self->Subwidget('Replace')->pack(
+			-fill => 'x',
+		);
+	}
+	$sandr->pack(
+		-fill => 'x',
+		-before => $self->Subwidget('Statusbar'),
+	);
+	$self->toplevel->geometry($geosave);
+
+}
+
+sub FindClose {
+	my $self = shift;
+	$self->Subwidget('SandR')->packForget;
 }
 
 sub foldButton {
@@ -664,13 +710,12 @@ sub Kamelon {
 sub lnumberCheck {
 	my $self = shift;
 
-	return unless $self->{POSTCONFIG};
-
 	my $line = $self->visualBegin;
 	my $last = $self->visualEnd;
 	$self->SaveFirstVisible($line);
-	$self->SaveLastVisible($line);
+	$self->SaveLastVisible($last);
 
+	return unless $self->{POSTCONFIG};
 	return unless $self->cget('-shownumbers');
 
 	my $widget = $self->Subwidget('XText');
@@ -710,6 +755,7 @@ sub lnumberCheck {
 	my $numwidth = $nimf->[$count - 1]->reqwidth;
 	$numframe->configure(-width => $numwidth);
 
+	#remove redundant nummber labels
 	while (defined $nimf->[$count]) {
 		my $l = pop @$nimf;
 		$l->placeForget;
@@ -887,7 +933,11 @@ sub themeDialog {
 	)->pack(-fill => 'x');
 	$toolframe->Button(
 		-command => sub {
-			my $file = $self->getSaveFile;
+			my $file = $self->getSaveFile(
+				-filetypes => [
+					['Highlight Theme' => '.ctt'],
+				],
+			);
 			$editor->save($file) if defined $file;
 		},
 		-text => 'Save',
@@ -895,7 +945,11 @@ sub themeDialog {
 	$toolframe->Button(
 		-text => 'Load',
 		-command => sub {
-			my $file = $self->getOpenFile;
+			my $file = $self->getOpenFile(
+				-filetypes => [
+					['Highlight Theme' => '.ctt'],
+				],
+			);
 			if (defined $file) {
 				my $obj = Tk::CodeText::Theme->new;
 				$obj->load($file);
