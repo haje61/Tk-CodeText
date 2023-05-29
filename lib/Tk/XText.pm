@@ -25,15 +25,43 @@ Construct Tk::Widget 'XText';
 
 =head1 DESCRIPTION
 
+B<Tk::XText> inherits L<Tk::Text>. It adds an advanced Undo/Redo stack, 
+facilities for indenting and unindenting, commenting and uncommenting 
+and autoindendation.
+
+It's main purpose is to serve as the text widget in the L<Tk::CodeText> 
+mega widget.
+
+The options and methods below are only documented if they are not available
+within the L<Tk::CodeText> context. Otherwise see there.
+
 =head1 OPTIONS
 
 =over 4
+
+=item Name: B<autoIndent>
+
+=item Class: B<AutoIndent>
 
 =item Switch: B<-autoindent>
 
 =item Switch: B<-disablemenu>
 
+=item Name: B<disableMenu>
+
+=item Class: B<DisableMenu>
+
+=item Switch: B<-findandreplacecall>
+
+=item Name: B<indentStyle>
+
+=item Class: B<IndentStyle>
+
 =item Switch: B<-indentstyle>
+
+=item Name: B<match>
+
+=item Class: B<Match>
 
 =item Switch: B<-match>
 
@@ -41,17 +69,54 @@ Construct Tk::Widget 'XText';
 
 =item Switch: B<-mlcommentend>
 
+The end string of a multi line comment.
+
 =item Switch: B<-mlcommentstart>
+
+The start string of a multi line comment.
 
 =item Switch: B<-modifycall>
 
+This callback is called every time text is modified.
+used in L<Tk::Codetext> for adjusting line numbers and
+triggering syntax highlighting/code folding.
+
 =item Switch: B<-slcomment>
 
+The start string of a single line comment.
+
 =item Switch: B<-updatecall>
+
+Called during loading and saving. It is called every B<-updatelines> 
+with a percentage of the progress as parameter. Used for creating a
+progress bar in L<Tk::CodeText>.
+
+=item Name: B<updateLines>
+
+=item Class: B<UpdateLines>
+
+=item Switch: B<-updatelines>
 
 =back
 
 =cut
+
+=head1 EVENTS AND KEYBINDINGS
+
+Besides the events of l<Tk::Text>, this module responds to
+the following events and bindings:
+
+ Event:         Key:
+ <<Find>>       F8
+ <<Replace>>    F9
+ <<Indent>>     CONTROL+J
+ <<UnIndent>>   CONTROL+SHIFT+J or CONTROL+TAB
+ <<Comment>>    CONTROL+G
+ <<UnComment>>  CONTROL+SHIFT+G
+ <<Undo>>       CONTROL+Z
+ <<Redo>>       CONTROL+SHIFT+Z
+
+Further more, CONTROL+A selects all text.
 
 =head1 METHODS
 
@@ -68,7 +133,9 @@ sub Populate {
 	$self->{BUFFERMODIFIED} = 0;
 	$self->{BUFFERSTART} = '1.0';
 	$self->{BUFFERREPLACE} = '';
+	$self->{REDOEMPTYMODIFIED} = 0;
 	$self->{REDOSTACK} = [];
+	$self->{UNDOEMPTYMODIFIED} = 0;
 	$self->{UNDOSTACK} = [];
 
 	$self->ResetRedo;
@@ -79,15 +146,15 @@ sub Populate {
 		-autoindent => ['PASSIVE', 'autoIndent', 'AutoIndent', 0],
 		-disablemenu => ['PASSIVE', 'disableMenu', 'Disablemenu', 0],
 		-findandreplacecall => ['PASSIVE'],
-		-indentstyle => ['PASSIVE', undef, undef, "tab"],
-		-match => ['PASSIVE', undef, undef, '[]{}()'],
+		-indentstyle => ['PASSIVE', 'indentStyle', 'IndentStyle', "tab"],
+		-match => ['PASSIVE', 'match', 'Match', '[]{}()'],
 		-matchoptions	=> ['METHOD', undef, undef, [-background => 'red', -foreground => 'yellow']],
-		-modifycall => ['CALLBACK', undef, undef, sub {}],
 		-mlcommentend => ['PASSIVE'],
 		-mlcommentstart => ['PASSIVE'],
+		-modifycall => ['CALLBACK', undef, undef, sub {}],
 		-slcomment => ['PASSIVE'],
 		-updatecall => ['CALLBACK', undef, undef, sub {}],
-		-updatelines => ['PASSIVE', undef, undef, 100],
+		-updatelines => ['PASSIVE', 'updateLines', 'UpdateLines', 100],
 		DEFAULT => [ 'SELF' ],
 	);
 	$self->eventAdd('<<Find>>', '<F8>');
@@ -204,13 +271,22 @@ sub clear {
 
 sub clearModified {
 	my $self = shift;
-	$self->editModified(0);
 	$self->Flush;
+	$self->editModified(0);
 	$self->BufferModified(0);
+
 	my $r = $self->RedoStack;
-	for (@$r) { $_->{'modified'} = 1 }
 	my $u = $self->UndoStack;
-	for (@$u) { $_->{'modified'} = 1 }
+
+	for (@$r, @$u) { $_->{'modified'} = 1 }
+
+	my $clredo = 0;
+	$clredo = 1 if @$r;
+	$self->RedoEmptyModified($clredo);
+
+	my $clundo = 0;
+	$clundo = 1 if @$u;
+	$self->UndoEmptyModified($clundo);
 }
 
 =item B<comment>
@@ -278,11 +354,11 @@ sub delete {
 	$self->Callback('-modifycall', $begin);
 }
 
-sub doAutoIndent {
+sub DoAutoIndent {
 	my $self = shift;
 	if ($self->cget('-autoindent')) {
 		my $i = $self->index('insert linestart');
-		if ($self->compare($i, ">", '0.0')) {
+		if ($self->compare($i, ">", '1.0')) {
 			my $s = $self->get("$i - 1 lines", "$i - 1 lines lineend");
 			$s =~ /^(\s+)/;
 			if ($1) {
@@ -475,6 +551,12 @@ sub insert {
 	$self->RecordUndo('insert', $self->editModified,$pos, $string);
 	$self->SUPER::insert($pos, $string);
 	$self->Callback('-modifycall', $pos);
+}
+
+sub Insert {
+	my ($self, $string) = @_;
+	$self->SUPER::Insert($string);
+	$self->DoAutoIndent if $string eq "\n" ;
 }
 
 sub InsertKeypress {
@@ -780,7 +862,11 @@ sub redo {
 		} else {
 			carp "invalid redo mode $mode, should be 'delete', 'insert', or 'replace'\n";
 		}
-# 		$self->editModified($o->{'redomod'});
+# 		if ($self->UndoStackEmpty) {
+# 			$self->editModified($self->UndoEmptyModified);
+# 		} else {
+# 			$self->editModified($o->{'modified'});
+# 		}
 		if (my $sel = $o->{'selection'}) {
 			$self->unselectAll;
 			$self->tagAdd('sel',@$sel);
@@ -790,8 +876,20 @@ sub redo {
 	}
 }
 
+sub RedoEmptyModified {
+	my $self = shift;
+	$self->{REDOEMPTYMODIFIED} = shift if @_;
+	return $self->{REDOEMPTYMODIFIED}
+}
+
 sub RedoStack {
 	return $_[0]->{REDOSTACK}
+}
+
+sub RedoStackEmpty {
+	my $self = shift;
+	my $stack = $self->{REDOSTACK};
+	return (@$stack eq [])
 }
 
 sub ReplaceSelectionsWith {
@@ -856,7 +954,6 @@ sub save {
 	my $saved = 0;
 	my $count = 0;
 	my $thresh = $self->cget('-updatelines');
-	$self->clear;
 	my $index = '1.0';
 	while ($self->compare($index,'<','end')) {
 		my $end = $self->index("$index lineend + 1c");
@@ -893,10 +990,6 @@ sub selectionExists {
 	my @ranges = $self->tagRanges('sel');
 	return @ranges > 1
 }
-
-=item B<selectionModify>
-
-=cut
 
 sub selectionModify {
 	my ($self, $char, $mode) = @_;
@@ -1009,7 +1102,11 @@ sub undo {
 		} else {
 			carp "invalid undo mode '$mode"."', should be 'delete', 'insert', or 'replace'\n";
 		}
-		$self->editModified($o->{'modified'});
+# 		if ($self->RedoStackEmpty) {
+# 			$self->editModified($self->RedoEmptyModified);
+# 		} else {
+			$self->editModified($o->{'modified'});
+# 		}
 		if (my $sel = $o->{'selection'}) {
 			$self->unselectAll;
 			$self->tagAdd('sel',@$sel);
@@ -1019,8 +1116,20 @@ sub undo {
 	}
 }
 
+sub UndoEmptyModified {
+	my $self = shift;
+	$self->{UNDOEMPTYMODIFIED} = shift if @_;
+	return $self->{UNDOEMPTYMODIFIED}
+}
+
 sub UndoStack {
 	return $_[0]->{UNDOSTACK}
+}
+
+sub UndoStackEmpty {
+	my $self = shift;
+	my $stack = $self->{UNDOSTACK};
+	return (@$stack eq [])
 }
 
 

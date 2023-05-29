@@ -87,6 +87,7 @@ sub popUp {
 
 sub Put {
 	my ($self, $value) = @_;
+	return unless defined $value;
 	if ($value =~ /^(.*)([c,m,i,p])/) {
 		my $size = $1;
 		my $unit = $2;
@@ -191,6 +192,12 @@ sub Select {
 
 package Tk::CodeText::StatusBar;
 
+=head1 NAME
+
+Tk:CodeText::StatusBar - Status bar for  L<Tk::CodeText>
+
+=cut
+
 use strict;
 use warnings;
 use vars qw($VERSION);
@@ -228,6 +235,40 @@ static char *save[]={
 "..############..",
 "................"};
 ';
+
+=head1 SYNOPSIS
+
+ require Tk::CodeText::StatusBar;
+ my $text= $window->StatusBar(@options)->pack;
+
+=head1 DESCRIPTION
+
+Inherits L<Tk::Frame>.
+
+Provides a status bar to L<Tk::CodeText>.
+
+=head1 OPTIONS
+
+=over 4
+
+=item Switch: B<-interval>
+
+By default 200 ms. Update interval for the status bar.
+
+=item Switch: B<-saveimage>
+
+The icon image used to indicate the text is modified.
+By default it is an internally defined xpm.
+
+=item Switch: B<-widget>
+
+Mandatory!
+
+Reference to the L<Tk::CodeText> widget it is serving.
+
+=back
+
+=cut
 
 sub Populate {
 	my ($self,$args) = @_;
@@ -407,6 +448,26 @@ sub StatusUpdate {
 
 	$self->after($self->cget('-interval'), ['StatusUpdate', $self]);
 }
+
+=head1 AUTHOR
+
+Hans Jeuken (hanje at cpan dot org)
+
+=head1 BUGS
+
+Unknown. If you find any, please contact the author.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item L<Tk::CodeText>
+
+=item L<Tk::CodeText::Theme>
+
+=back
+
+=cut
 
 1;
 

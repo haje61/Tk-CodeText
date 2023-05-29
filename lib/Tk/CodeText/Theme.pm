@@ -1,5 +1,11 @@
 package Tk::CodeText::Theme;
 
+=head1 NAME
+
+Tk:CodeText::Theme - Theme object for highlight colors in L<Tk::CodeText>.
+
+=cut
+
 use strict;
 use warnings;
 use vars qw($VERSION);
@@ -48,6 +54,19 @@ my %Options = (
 	-weight => 1,
 );
 
+=head1 SYNOPSIS
+
+ require Tk::CodeText::Theme;
+ my $theme= new Tk::CodeText::Theme;
+ $theme->load($file);
+ $theme->save($file);
+
+=head1 METHODS
+
+=over 4
+
+=cut
+
 sub new {
 	my $proto = shift;
 	my $class = ref($proto) || $proto;
@@ -58,6 +77,12 @@ sub new {
 	$self->clear;
 	return $self;
 }
+
+=item B<clear>
+
+Clears all tag definitions.
+
+=cut
 
 sub clear {
 	my $self = shift;
@@ -73,6 +98,12 @@ sub clear {
 	}
 }
 
+=item B<getItem>I<($tag, $option)>
+
+Returns the value of $option assigned to $tag.
+
+=cut
+
 sub getItem {
 	my ($self, $tag, $option) = @_;
 	my $pool = $self->Pool;
@@ -86,6 +117,12 @@ sub getItem {
 		warn "invalid tag name '$tag' in getItem"
 	}
 }
+
+=item B<get>
+
+Returns a list of tag/options pairs.
+
+=cut
 
 sub get {
 	my $self = shift;
@@ -103,6 +140,12 @@ sub get {
 	}
 	return @result
 }
+
+=item B<load>I<($file)>
+
+Loads a CodeText theme definition file.
+
+=cut
 
 sub load {
 	my ($self, $file) = @_;
@@ -136,6 +179,18 @@ sub load {
 	}
 }
 
+=item B<optionList>
+
+Returns a list of available options to use.
+They are:
+
+ -background
+ -foreground
+ -slant
+ -weight
+
+=cut
+
 sub optionList {
 	return sort keys %Options;
 }
@@ -143,6 +198,12 @@ sub optionList {
 sub Pool {
 	return $_[0]->{POOL};
 }
+
+=item B<put>I<(@list)>
+
+Assigns a @list of tag/option pairs.
+
+=cut
 
 sub put {
 	my $self = shift;
@@ -160,6 +221,12 @@ sub put {
 		}
 	}
 }
+
+=item B<save>I<($file)>
+
+Saves a CodeText theme definition file.
+
+=cut
 
 sub save {
 	my ($self, $file) = @_;
@@ -182,6 +249,12 @@ sub save {
 	}
 }
 
+=item B<setItem>I<($tag, $option, $value)>
+
+Assigns $value to $option in $tag.
+
+=cut
+
 sub setItem {
 	my ($self, $tag, $option, $value) = @_;
 	my $pool = $self->Pool;
@@ -196,16 +269,91 @@ sub setItem {
 	}
 }
 
+=item B<tagList>
+
+Returns a list of available tags.
+They are:
+
+ Alert
+ Annotation
+ Attribute
+ BaseN
+ BuiltIn
+ Char
+ Comment
+ CommentVar
+ Constant
+ ControlFlow
+ DataType
+ DecVal
+ Documentation
+ Error
+ Extension
+ Float
+ Function
+ Import
+ Information
+ Keyword
+ Normal
+ Operator
+ Others
+ Preprocessor
+ RegionMarker
+ SpecialChar
+ SpecialString
+ String
+ Variable
+ VerbatimString 
+ Warning
+
+=cut
+
 sub tagList {
 	return sort keys %Attributes;
 }
+
+=item B<validOption>I<($option)
+
+Returns true if $option is in the list of available options.
+
+=cut
 
 sub validOption {
 	my ($self, $option) = @_;
 	return exists $Options{$option};
 }
 
+=item B<validTag>I<($tag)
+
+Returns true if $tag is in the list of available tags.
+
+=cut
+
 sub validTag {
 	my ($self, $tag) = @_;
 	return exists $Attributes{$tag};
 }
+
+=back
+
+=head1 AUTHOR
+
+Hans Jeuken (hanje at cpan dot org)
+
+=head1 BUGS
+
+Unknown. If you find any, please contact the author.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item L<Tk::CodeText>
+
+=back
+
+=cut
+
+1;
+
+__END__

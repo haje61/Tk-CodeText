@@ -5,15 +5,7 @@ use warnings;
 
 use base qw(Tk::Derived Tk::ColorEntry);
 
-require Tk::Font;
-
 Construct Tk::Widget 'MyColorEntry';
-
-sub Populate {
-	my ($self,$args) = @_;
-
-	$self->SUPER::Populate($args);
-}
 
 sub OnEscape {
 	my $self = shift;
@@ -35,7 +27,15 @@ sub popDown {
 	$self->Callback('-command', '') if $self->get eq '';
 }
 
+###########################################################################
+
 package Tk::CodeText::TagsEditor;
+
+=head1 NAME
+
+Tk:CodeText::TagsEditor - Edit highlighting tags for L<Tk::CodeText>
+
+=cut
 
 use strict;
 use warnings;
@@ -46,34 +46,100 @@ use base qw(Tk::Derived Tk::Frame);
 
 require Tk::ColorEntry;
 require Tk::Pane;
+require Tk::Balloon;
 use Tk::CodeText::Theme;
 
 Construct Tk::Widget 'TagsEditor';
+
+=head1 SYNOPSIS
+
+ require Tk::CodeText::TagsEditor;
+ my $text= $window->TagsEditor(@options)->pack;
+
+=head1 DESCRIPTION
+
+Inherits L<Tk::Frame>.
+
+Provides an editor module for the color and font tags used for
+syntax highlighting in L<Tk::CodeText>.
+
+=head1 OPTIONS
+
+=over 4
+
+=item Switch: B<-balloon>
+
+If you already have it available you can supply a reference to a
+balloon widget. If you do not, it will create it's own balloon
+widget.
+
+Only available at create time.
+
+=item Switch: B<-defaultbackground>
+
+Mandatory!
+
+Give it the background color of your text widget as value.
+
+=item Switch: B<-defaultforeground>
+
+Mandatory!
+
+Give it the foreground color of your text widget as value.
+
+=item Switch: B<-defaultfont>
+
+Mandatory!
+
+Give it the font object of your text widget as value.
+
+=item Switch: B<-historyfile>
+
+The name of the file where all the L<Tk::ColorEntry> widgets
+store their recently used colors. If you do not specify this,
+the history of the ColorEntry widgets will not propagate between
+them.
+
+Only available at create time.
+
+=item Switch: B<-theme>
+
+You can supply a reference to a L<Tk::CodeText::Theme> object. 
+If you do not, it will create it's own.
+
+Only available at create time.
+
+=back
+
+=head1 METHODS
+
+=over 4
+
+=cut
 
 sub Populate {
 	my ($self,$args) = @_;
 	
 	my $historyfile = delete $args->{'-historyfile'};
+
 	my $balloon = delete $args->{'-balloon'};
+	$balloon = $self->Balloon unless defined $balloon;
+
 	my $theme = delete $args->{'-theme'};
-	my $widget = delete $args->{'-widget'};
+	$theme = Tk::CodeText::Theme->new unless defined $theme;
+
+	my $defaultbackground = delete $args->{'-defaultbackground'};
+	die 'You must specify the -defaultbackground option' unless defined $defaultbackground;
+
+	my $defaultforeground = delete $args->{'-defaultforeground'};
+	die 'You must specify the -defaultforeground option' unless defined $defaultforeground;
+
+	my $defaultfont = delete $args->{'-defaultfont'};
+	die 'You must specify the -defaultfont option' unless defined $defaultfont;
 
 	$self->SUPER::Populate($args);
 
-	$theme = Tk::CodeText::Theme->new unless defined $theme;
 	$self->{THEME} = $theme;
-
-	
-	my $lab = $self->Label;
-	my $defaultbackground = $lab->cget('-background');
-	my $defaultforeground = $lab->cget('-foreground');
-	my $defaultfont = $lab->cget('-font');
-	$lab->destroy;
-	if (defined $widget) {
-		$defaultbackground = $widget->cget('-background');
-		$defaultforeground = $widget->cget('-foreground');
-		$defaultfont = $widget->cget('-font');
-	}
 
 	my $frame = $self->Scrolled('Pane',
 		-height => 200,
@@ -152,6 +218,7 @@ sub Populate {
 	$self->ConfigSpecs(
 		-defaultbackground => ['PASSIVE', undef, undef, $defaultbackground],
 		-defaultforeground => ['PASSIVE', undef, undef, $defaultforeground],
+		-defaultfont => ['PASSIVE', undef, undef, $defaultfont],
 		DEFAULT => [ $self ],
 	);
 }
@@ -174,16 +241,34 @@ sub fontCompose {
 	);
 }
 
+=item b<get>
+
+Returns a list of tag/options pairs.
+
+=cut
+
 sub get {
 	my $self = shift;
 	return $self->Theme->get;
 }
+
+=item b<load>
+
+Loads a CodeText theme definition file.
+
+=cut
 
 sub load {
 	my $self = shift;
 	$self->Theme->load(@_);
 	$self->updateAll;
 }
+
+=item b<put>
+
+Assigns a @list of tag/option pairs.
+
+=cut
 
 sub put {
 	my $self = shift;
@@ -200,6 +285,12 @@ sub put {
 	}
 	$self->updateAll;
 }
+
+=item B<save>I<($file)>
+
+Saves a CodeText theme definition file.
+
+=cut
 
 sub save {
 	my $self = shift;
@@ -228,14 +319,14 @@ sub updateBackground {
 	my $bg = $color;
 	$bg = $self->cget('-defaultbackground') if $color eq '';
 	$self->Subwidget($tag)->configure(-background => $bg);
-	$self->Theme->setItem($tag, '-background',$color);
+	$self->Theme->setItem($tag, '-background', $color);
 }
 
 sub updateFont {
 	my ($self, $tag, %values) = @_;
 
 	my $label = $self->Subwidget($tag);
-	my $font = $label->cget('-font');
+	my $font = $self->cget('-defaultfont');
 	my $weight = $self->fontActual($font, '-weight');
 	my $slant = $self->fontActual($font, '-slant');
 	my %options = (
@@ -262,6 +353,28 @@ sub Theme {
 	return $_[0]->{THEME};
 }
 
+=back
+
+=head1 AUTHOR
+
+Hans Jeuken (hanje at cpan dot org)
+
+=head1 BUGS
+
+Unknown. If you find any, please contact the author.
+
+=head1 SEE ALSO
+
+=over 4
+
+=item L<Tk::CodeText>
+
+=item L<Tk::CodeText::Theme>
+
+=back
+
+=cut
 
 1;
+
 __END__

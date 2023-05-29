@@ -36,7 +36,7 @@ package Tk::CodeText;
 
 =head1 NAME
 
-Tk:XText - Extended Text widget
+Tk:CodeText - Programmer's Swiss army knife Text widget
 
 =cut
 
@@ -112,10 +112,25 @@ static unsigned char indicatoropen_bits[] = {
 
 =head1 SYNOPSIS
 
- require Tk::XText;
- my $text= $window->XText(@options)->pack;
+ require Tk::CodeText;
+ my $text= $window->CodeText(@options)->pack;
 
 =head1 DESCRIPTION
+
+B<Tk::CodeText> aims to be a Scintilla like text widget for Perl/Tk.
+
+It uses L<Syntax::Kamelon> for syntax highlighting, code folding
+and syntax sensitive commenting and unmommenting, both single line
+and multiple line.
+
+It displays line numbers and code folding markers. Also a status bar
+with content info and tools for setting tab size, indent style andsyntax.
+
+It provides an advanced, word based, undo/redo stack that keeps track
+of the last saving point and selections.
+
+Furthermore we have an autoindent feature as well as matching of
+{}, () and [] pairs.
 
 =head1 OPTIONS
 
@@ -123,23 +138,120 @@ static unsigned char indicatoropen_bits[] = {
 
 =item Switch: B<-autoindent>
 
-=item Switch: B<-commentend>
+By default 0. If set the text will be indented to the 
+level and style of the previous line.
 
-=item Switch: B<-commentstart>
+=item Name: B<configDir>
+
+=item Class: B<ConfigDir>
+
+=item Switch: B<-configdir>
+
+An empty string by default. If set to an
+existing folder that folder will be used
+for saving and loading theme files.
 
 =item Switch: B<-disablemenu>
 
-=item Switch: B<-indentchar>
+By default 0. If set the right-click context menu is disabled.
+
+=item Name: B<highlightInterval>
+
+=item Class: B<HighlightInterval>
+
+=item Switch: B<-highlightinterval>
+
+By default 1 milisecond. Highlighting is done on a
+line by line basis. This is the time between lines.
+
+=item Name: B<indentStyle>
+
+=item Class: B<IndentStyle>
+
+=item Switch: B<-indentstyle>
+
+Default value 'tab'. You can also set it to a number.
+In that case an indent will be the number of spaces.
 
 =item Switch: B<-match>
 
+Default value '[]{}()'. Specifies which items to match
+against nested occurrences.
+
 =item Switch: B<-matchoptions>
 
-=item Switch: B<-modifycall>
+Default: [-background => 'red', -foreground => 'yellow'].
+Specifies the options for the match tag.
+
+=item Switch: B<-minusimg>
+
+Image used for the collapse state of a folding point.
+By default it is a bitmap defined in this module.
+
+=item Switch: B<-plusimg>
+
+Image used for the expand state of a folding point.
+By default it is a bitmap defined in this module.
 
 =item Switch: B<-scrollbars>
 
-=item Switch: B<-updatecall>
+Default value 'osoe'. Specifies if and how scrollbars
+are to be used. If you set it to an ampty string no
+scrollbars will be created. See also L<Tk::Scrolled>.
+
+Only available at create time.
+
+=item Name: B<showFolds>
+
+=item Class: B<ShowFolds>
+
+=item Switch: B<-showfolds>
+
+Default value 1. If cleared the folding markers
+will be hidden.
+
+=item Name: B<showNumbers>
+
+=item Class: B<ShowNumbers>
+
+=item Switch: B<-shownumbers>
+
+Default value 1. If cleared the line numbers
+will be hidden.
+
+=item Name: B<showStatus>
+
+=item Class: B<ShowStatus>
+
+=item Switch: B<-showstatus>
+
+Default value 1. If cleared the status bar
+will be hidden.
+
+=item Name: B<syntax>
+
+=item Class: B<Syntax>
+
+=item Switch: B<-syntax>
+
+Default value 'None'. Sets and returns the currently
+used syntax definition.
+
+=item Switch: B<-themefile>
+
+Default value undef. Sets and loads a theme file with tags information 
+for highlighting. A call to cget returns the name of the loaded theme file.
+See also L<Tk::CodeText::Theme>.
+
+=item Name: B<updateLines>
+
+=item Class: B<UpdateLines>
+
+=item Switch: B<-updatelines>
+
+Default value 100. If is used during save and load operation. 
+It specifies after how many lines an update on the progress bar on
+the status bar should occur.
 
 =back
 
@@ -206,14 +318,21 @@ sub Populate {
 	);
 
 	#create the textwidget
-	my $text = $ef->Scrolled('XText',
+	my @opt = (
 		-width => 20,
 		-height => 10,
 		-findandreplacecall => sub { $self->FindAndOrReplace(@_) },
 		-modifycall => ['modifiedCheck', $self],
 		-relief => 'flat',
 		-scrollbars => $scrollbars,
-	)->pack(-side => 'left', -expand =>1, -fill => 'both');
+	);
+	my $text;
+	if ($scrollbars eq '') {
+		$text = $ef->XText(@opt)
+	} else {
+		$text = $ef->Scrolled('XText', @opt)
+	}
+	$text->pack(-side => 'left', -expand =>1, -fill => 'both');
 	
 	#create the find and replace panel
 	my @pack = (-side => 'left', -padx => 2, -pady => 2);
@@ -289,10 +408,8 @@ sub Populate {
 	$l->destroy;
 
 	$self->ConfigSpecs(
-		-autoindent => [qw/PASSIVE autoindent Autoindent/, 0],
-		-commentchar => '-commentstart', #depricated
 		-configdir => [qw/PASSIVE configdir ConfigDir/, ''],
-		-highlightinterval => [qw/METHOD highlightinterval HighlightInterval/, 1],
+		-highlightinterval => [qw/METHOD highlightInterval HighlightInterval/, 1],
 		-minusimg => ['PASSIVE', undef, undef, $self->Bitmap(
 			-data => $minusimg,
 			-foreground => $fg,
@@ -301,8 +418,6 @@ sub Populate {
 			-data => $plusimg,
 			-foreground => $fg,
 		)],
-		-rules => '-attributes', #depricated
-		-rulesdir => '-configdir', #depricated
 		-showfolds => [qw/METHOD showFolds ShowFolds/, 1],
 		-shownumbers => [qw/METHOD showNumers ShowNumbers/, 1],
 		-showstatus => [qw/METHOD showStatus ShowStatus/, 1],
@@ -365,9 +480,29 @@ sub Populate {
  	});
 }
 
+=item B<canUndo>
+
+Returns true if the undo stack has content.
+
+=cut
+
+=item B<canRedo>
+
+Returns true if the redo stack has content.
+
+=cut
+
+=item B<clear>
+
+Delets all text. Clears the undo and redo stack. Clears the modified flag.
+Resets hightlighting to syntax 'None'
+
+=cut
+
 sub clear {
 	my $self = shift;
 	$self->Kamelon->Reset;
+	$self->configure(-syntax => 'None');
 	$self->Subwidget('XText')->clear;
 }
 
@@ -382,6 +517,12 @@ sub ColorInf {
 	$self->{COLORINF} = shift if @_;
 	return $self->{COLORINF}
 }
+
+=item B<comment>
+
+Comments the current line or selection.
+
+=cut
 
 sub contentCheck {
 	my $self = shift;
@@ -469,6 +610,12 @@ sub foldCollapse {
 	$self->foldsCheck;
 }
 
+=item B>foldCollapseAll>
+
+Collapses all folding points.
+
+=cut
+
 sub foldCollapseAll {
 	my $self = shift;
 	my $folds = $self->Kamelon->Formatter->Folds;
@@ -499,6 +646,12 @@ sub foldExpand {
 	}
 	$self->foldsCheck;
 }
+
+=item B>foldExpandAll>
+
+Expands all folding points.
+
+=cut
 
 sub foldExpandAll {
 	my $self = shift;
@@ -573,6 +726,13 @@ sub foldsClear {
 	}
 }
 
+=item B<fontCompose>I<($font, %options)>
+
+Returns a new font based on $font.
+The keys -family -size -weight -slant are supported 
+
+=cut
+
 sub fontCompose {
 	my ($self, $font, %options) = @_;
 	my $family = $self->fontActual($font, '-family');
@@ -590,6 +750,19 @@ sub fontCompose {
 		-weight => $weight,
 	);
 }
+
+=item B<getFontInfo>
+
+Returns info about the font used in the text widget.
+The info is a hash with keys -family -size -weight -slant -underline -overstrike. 
+
+=cut
+
+=item B<goTo>I<($index)>
+
+Sets the insert cursor to $index.
+
+=cut
 
 sub hideLine {
 	my ($self, $line) = @_;
@@ -692,6 +865,16 @@ sub highlightRemove {
 	}
 }
 
+=item B<indent>
+
+Indents the current line or selection.
+
+=item B<isHidden>I<($line)>
+
+Returns true if $line is hidden by a colde fold.
+
+=cut
+
 sub isHidden {
 	my ($self, $line) = @_;
 	my @names = $self->tagNames("$line.0");
@@ -703,7 +886,9 @@ sub Kamelon {
 	return $_[0]->{KAMELON}
 }
 
-=item B<lnumberCheck>
+=item B<linenumber>I<($index)>
+
+Returns the line number of $index.
 
 =cut
 
@@ -763,6 +948,13 @@ sub lnumberCheck {
 	}
 }
 
+=item B<load>I<($file)>
+
+Clears the text widget and loads $file.
+Returns 1 if successfull.
+
+=cut
+
 sub load{
 	my ($self, $file) = @_;
 	if ($self->Subwidget('XText')->load($file)) {
@@ -800,6 +992,18 @@ sub OnKeyPress {
 	}
 }
 
+=item B<redo>
+
+Redoes the last undo.
+
+=cut
+
+=item B<save>I<($file)>
+
+Saves the text into $file. Returns 1 if successfull.
+
+=cut
+
 sub SaveFirstVisible {
 	my $self = shift;
 	$self->{SAVEFIRSTVISIBLE} = shift if @_;
@@ -811,6 +1015,12 @@ sub SaveLastVisible {
 	$self->{SAVELASTVISIBLE} = shift if @_;
 	return $self->{SAVELASTVISIBLE}
 }
+
+=item B<selectionExists>
+
+Returns true if a selection exists
+
+=cut
 
 sub showfolds {
 	my ($self, $flag) = @_;
@@ -908,26 +1118,48 @@ sub syntax {
 	return $self->{SYNTAX}
 }
 
+=item B<tags>
+
+Returns the Kamelon list of AvailableAttributes.
+
+=cut
+
 sub tags {
 	return $_[0]->Kamelon->AvailableAttributes
 }
+
+=item B<theme>
+
+Returns a reference to the current theme object.
+See also L<Tk::CodeText::Theme>
+
+=cut
 
 sub theme {
 	return $_[0]->{THEME}
 }
 
+=item B<themeDialog>
+
+Initiates a dialog for editing the colors and font information for highlighting.
+
+=cut
+
 sub themeDialog {
 	my $self = shift;
 	my $theme = $self->theme;
 	my $dialog = $self->DialogBox(
+		-title => 'Theme editor',
 		-buttons => ['Ok', 'Cancel'],
 		-default_button => 'Ok',
 		-cancel_button => 'Cancel',
 	);
 	my $editor = $dialog->add('TagsEditor',
+		-defaultbackground => $self->Subwidget('XText')->cget('-background'),
+		-defaultforeground => $self->Subwidget('XText')->cget('-foreground'),
+		-defaultfont => $self->Subwidget('XText')->cget('-font'),
 		-relief => 'sunken',
 		-borderwidth => 2,
-		-widget => $self,
 	)->pack(-expand => 1, -fill => 'both', -padx => 2, -pady => 2);
 	my $toolframe =  $dialog->add('Frame',
 	)->pack(-fill => 'x');
@@ -990,8 +1222,8 @@ sub themeUpdate {
 	my $theme = $self->theme;
 	my @values = $theme->get;
 	my $font = $self->cget('-font');
-	my $bg = $self->cget('-background');
-	my $fg = $self->cget('-foreground');
+	my $bg = $self->Subwidget('XText')->cget('-background');
+	my $fg = $self->Subwidget('XText')->cget('-foreground');
 	for ($theme->tagList) { $self->tagDelete($_) }
 	while (@values) {
 		my $tag = shift @values;
@@ -1012,9 +1244,25 @@ sub themeUpdate {
 	}
 }
 
+=item B<uncomment>
+
+Uncomments the current line or selection.
+
+=item B<undo>
+
+Undoes the last edit operation.
+
+=item B<unindent>
+
+Unintents the current line or selection
+
+=cut
+
 sub ViewMenuItems {
 	my $self = shift;
 
+	my $a;
+	tie $a, 'Tk::Configure', $self, '-autoindent';
 	my $f;
 	tie $f, 'Tk::Configure', $self, '-showfolds';
 	my $n;
@@ -1023,42 +1271,45 @@ sub ViewMenuItems {
 	tie $s, 'Tk::Configure', $self, '-showstatus';
 
 	my @values = (-onvalue => 1, -offvalue => 0);
-	my $items = $self->Subwidget('XText')->ViewMenuItems;
-	push @$items,
-		[command => "Colors", -command => [themeDialog => $self]],
+	my $v;
+	tie $v,'Tk::Configure',$self,'-wrap';
+	my @items = ( 
+		[checkbutton => '~Auto indent', @values, -variable => \$a],
+		['cascade'=> '~Wrap', -tearoff => 0, -menuitems => [
+			[radiobutton => 'Word', -variable => \$v, -value => 'word'],
+			[radiobutton => 'Character', -variable => \$v, -value => 'char'],
+			[radiobutton => 'None', -variable => \$v, -value => 'none'],
+		]],
+		[command => '~Colors', -command => [themeDialog => $self]],
 		'separator',
-		[checkbutton => 'Show code folds', @values, -variable => \$f],
-		[checkbutton => 'Show line numbers', @values, -variable => \$n],
-		[checkbutton => 'Show status bar', @values, -variable => \$s];
-	return $items
+		[checkbutton => 'Code ~folds', @values, -variable => \$f],
+		[checkbutton => '~Line numbers', @values, -variable => \$n],
+		[checkbutton => '~Status bar', @values, -variable => \$s],
+	);
+	return \@items
 }
+
+=item B<visualBegin>
+
+Returns the line number of the first visible line.
+
+=cut
+
+=item B<visualEnd>
+
+Returns the line number of the last visible line.
+
+=cut
 
 =back
 
 =head1 AUTHOR
 
-=over 4
-
-=item Hans Jeuken (hanje at cpan dot org)
-
-=back
-
-=cut
+Hans Jeuken (hanje at cpan dot org)
 
 =head1 BUGS
 
 Unknown. If you find any, please contact the author.
-
-=cut
-
-=head1 TODO
-
-=over 4
-
-
-=back
-
-=cut
 
 =head1 SEE ALSO
 

@@ -52,9 +52,11 @@ if (defined $app) {
 	);
 	
 	$tags = $app->TagsEditor(
+		-defaultbackground => $text->Subwidget('XText')->cget('-background'),
+		-defaultforeground => $text->Subwidget('XText')->cget('-foreground'),
+		-defaultfont => $text->Subwidget('XText')->cget('-font'),
 		-balloon => $app->Balloon,
 		-historyfile => 't/color_history',
-		-widget => $text,
 	)->pack(
 		-expand => 1,
 		-fill => 'both',

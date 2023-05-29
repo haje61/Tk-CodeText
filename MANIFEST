@@ -1,8 +1,15 @@
 CHANGES
 lib/Tk/CodeText.pm
+lib/Tk/CodeText/StatusBar.pm
+lib/Tk/CodeText/TagsEditor.pm
+lib/Tk/CodeText/Theme.pm
 lib/Tk/XText.pm
 Makefile.PL
 MANIFEST
 README.md
 t/1-Tk-XText.t
-t/2-Tk-CodeText.t
+t/2-Tk-CodeText-StatusBar.t
+t/3-Tk-CodeText.t
+t/4-Tk-CodeText-TagsEditor.t
+t/5-Tk-CodeText-Theme.t
+t/ref_file.pl
