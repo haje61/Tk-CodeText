@@ -6,6 +6,7 @@ use Tk;
 
 BEGIN { use_ok('Tk::CodeText') };
 
+# $delay = 3000;
 createapp;
 
 my $text;
@@ -46,13 +47,13 @@ if (defined $app) {
 				]
 			],
 			[ cascade => '~Edit',
-				-menuitems => $text->EditMenuItems,
+				-menuitems => [ $text->EditMenuItems ],
 			],
 			[ cascade => '~Search',
 				-menuitems => $text->SearchMenuItems,
 			],
 			[ cascade => '~View',
-				-menuitems => $text->ViewMenuItems,
+				-menuitems => [ $text->ViewMenuItems ],
 			],
 		],
 	));

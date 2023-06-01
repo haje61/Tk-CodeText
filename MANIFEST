@@ -1,3 +1,4 @@
+bin/codetext
 CHANGES
 lib/Tk/CodeText.pm
 lib/Tk/CodeText/StatusBar.pm

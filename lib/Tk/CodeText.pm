@@ -33,13 +33,11 @@ sub Widget { return $_[0]->{WIDGET} }
 
 package Tk::CodeText;
 
-
 =head1 NAME
 
-Tk:CodeText - Programmer's Swiss army knife Text widget
+Tk:CodeText - Programmer's Swiss army knife Text widget.
 
 =cut
-
 
 use strict;
 use warnings;
@@ -119,18 +117,38 @@ static unsigned char indicatoropen_bits[] = {
 
 B<Tk::CodeText> aims to be a Scintilla like text widget for Perl/Tk.
 
-It uses L<Syntax::Kamelon> for syntax highlighting, code folding
-and syntax sensitive commenting and unmommenting, both single line
-and multiple line.
+This is a rewrite, almost from scratch and not backwards compatible
+with version 0.3.4 and earlier.
 
-It displays line numbers and code folding markers. Also a status bar
-with content info and tools for setting tab size, indent style andsyntax.
+It leans heavily on L<Syntax::Kamelon>.
 
-It provides an advanced, word based, undo/redo stack that keeps track
-of the last saving point and selections.
+It features:
 
-Furthermore we have an autoindent feature as well as matching of
-{}, () and [] pairs.
+=over 4
+
+=item line numbers on display
+
+=item code folding
+
+=item status bar 
+
+The status bar has document info and tools for setting tab size, indent style and syntax
+
+=item advanced word based undo/redo stack
+
+It keeps track of the last saving point and selections
+
+=item syntax highlighting in many languages and formats.
+
+=item commenting and uncommenting blocks and lines
+
+=item indenting and unindenting blocks and lines
+
+=item automatic indentation
+
+=item matching of {}, () and [] pairs
+
+=back
 
 =head1 OPTIONS
 
@@ -180,7 +198,7 @@ against nested occurrences.
 
 =item Switch: B<-matchoptions>
 
-Default: [-background => 'red', -foreground => 'yellow'].
+Default: [-background => 'blue', -foreground => 'yellow'].
 Specifies the options for the match tag.
 
 =item Switch: B<-minusimg>
@@ -253,6 +271,12 @@ Default value 100. If is used during save and load operation.
 It specifies after how many lines an update on the progress bar on
 the status bar should occur.
 
+=item Switch: B<-xmldir>
+
+XML folder to use for L<Syntax::Kamelon>
+
+Only available at create time.
+
 =back
 
 =cut
@@ -267,12 +291,21 @@ sub Populate {
 	my ($self,$args) = @_;
 	
 	my $scrollbars = delete $args->{'-scrollbars'};
-	$scrollbars = 'osoe' unless defined $scrollbars;
+	$scrollbars = 'soe' unless defined $scrollbars;
+
 	my $theme = delete $args->{'-theme'};
 	unless (defined $theme) {
 		$theme = Tk::CodeText::Theme->new;
 		$theme->put(@defaultattributes);
 	}
+
+	my $xmldir = delete $args->{'-xmldir'};
+	my @ko = (
+		formatter => ['Base',
+			foldingdepth => 'all',
+		],
+	);
+	push @ko, 'xmldir', $xmldir if defined $xmldir;
 
 	$self->SUPER::Populate($args);
 
@@ -280,12 +313,9 @@ sub Populate {
 	$self->{COLORED} = 1;
 	$self->{FOLDBUTTONS} = {};
 	$self->{FOLDINF} = [];
+	$self->{FOLDSSHOWN} = [];
 	$self->{FOLDSVISIBLE} = 0;
-	$self->{KAMELON} = MyKamelon->new($self,
-		formatter => ['Base',
-			foldingdepth => 'all',
-		],
-	);
+	$self->{KAMELON} = MyKamelon->new($self, @ko);
 	$self->{HIGHLIGHTINTERVAL} = 1;
 	$self->{LOOPACTIVE} = 0;
 	$self->{NOHIGHLIGHTING} = 1;
@@ -316,6 +346,15 @@ sub Populate {
 	my $folds = $ef->Frame(
 		-width => 18,
 	);
+	$folds->bind('<ButtonRelease-3>', [$self, 'foldsMenuPop', Ev('X'), Ev('Y')]);
+	my $fmenu = $folds->Menu(
+		-tearoff => 0,
+		-menuitems => [
+			[command => 'Collapse All', -command => ['foldCollapseAll', $self]],
+			[command => 'Expand All', -command => ['foldExpandAll', $self]],
+		],
+	);
+	$fmenu->bind('<Leave>', [$fmenu, 'unpost']);
 
 	#create the textwidget
 	my @opt = (
@@ -340,6 +379,11 @@ sub Populate {
 	$self->Advertise(SandR => $sandr);
 
 	#searchframe
+	my $case = '-case';
+	my $find = '';
+	my $reg = '-exact';
+	my $replace = '';
+	
 	my $rframe; #the variable for the replaceframe must exist
 	my $sframe = $sandr->Frame->pack(-fill => 'x');
 	$sframe->Label(
@@ -347,29 +391,37 @@ sub Populate {
 		-text => 'Find',
 		-width => 7,
 	)->pack(@pack);
-	my $find = '';
-	$sframe->Entry(
+	my $e = $sframe->Entry(
 		-textvariable => \$find,
 	)->pack(@pack, -expand => 1, -fill => 'x');
+	$e->bind('<Escape>', [$self, 'FindClose']);
 	$sframe->Button(
 		-text => 'Next',
+		-command => sub { $self->FindNext('-forward', $reg, $case, $find) },
 	)->pack(@pack); 
 	$sframe->Button(
 		-text => 'Previous',
+		-command => sub { $self->FindNext('-backward', $reg, $case, $find) },
 	)->pack(@pack);
-	my $case = 1;
+	$sframe->Button(
+		-text => 'All',
+		-command => sub { $self->FindAll($reg, $case, $find) },
+	)->pack(@pack);
 	$sframe->Checkbutton(
 		-text => 'Case',
+		-onvalue => '-case',
+		-offvalue => '-nocase',
 		-variable => \$case,
 	)->pack(@pack);
-	my $reg = 0;
 	$sframe->Checkbutton(
 		-text => 'Reg',
+		-onvalue => '-regexp',
+		-offvalue => '-exact',
 		-variable => \$reg,
 	)->pack(@pack);
 	$sframe->Button(
-		-command => ['FindClose', $self],
 		-text => 'Close',
+		-command => ['FindClose', $self],
 	)->pack(@pack);
 
 	#replaceframe
@@ -380,15 +432,40 @@ sub Populate {
 		-width => 7,
 	)->pack(@pack);
 	$self->Advertise(Replace => $rframe);
-	my $replace = '';
-	$rframe->Entry(
+	my $r = $rframe->Entry(
 		-textvariable => \$replace,
 	)->pack(@pack, -expand => 1, -fill => 'x');
+	$r->bind('<Escape>', [$self, 'FindClose']);
 	$rframe->Button(
 		-text => 'Replace',
+		-command => sub {
+			$self->ReplaceSelectionsWith($replace) if $self->SelectionExists;
+			$self->FindNext('-forward', $reg, $case, $find);
+		},
+	)->pack(@pack); 
+	$rframe->Button(
+		-text => 'Skip',
+		-command => sub {	$self->FindNext('-forward', $reg, $case, $find)	},
 	)->pack(@pack); 
 	$rframe->Button(
 		-text => 'Replace all',
+		-command => sub {
+			my $pos = $self->index('insert');
+			$self->unselectAll;
+			$self->goTo('1.0');
+			my $count = 0;
+			$self->FindNext('-forward', $reg, $case, $find);
+			while ($self->selectionExists) {
+				if ($self->SelectionExists) {
+					$self->ReplaceSelectionsWith($replace);
+					$count ++
+				}
+				$self->FindNext('-forward', $reg, $case, $find);
+			}
+			$self->goTo($pos);
+			$self->see($pos);
+			$self->log("Made $count replaces");
+		},
 	)->pack(@pack);
 
 	#create the statusbar
@@ -396,11 +473,12 @@ sub Populate {
 		-widget => $self,
 	);
 	$self->after(10, ['StatusUpdate', $statusbar]);
-
+	#create progressbar for loading and saving
 	$self->Advertise(XText => $text);
 	$self->Advertise(Numbers => $numbers);
 	$self->Advertise(Folds => $folds);
 	$self->Advertise(Statusbar => $statusbar);
+	$self->Advertise(Foldsmenu => $fmenu);
 
 	# hack for getting proper bitmap foreground
 	my $l = $self->Label;
@@ -437,7 +515,8 @@ sub Populate {
 	$yscroll->configure(
 		-command => sub {
 			$scrollcommand->Call(@_);
-			$self->contentCheckLight;
+			$self->lnumberCheck;
+			$self->foldsCheck;
 		}
 	);
 
@@ -501,9 +580,9 @@ Resets hightlighting to syntax 'None'
 
 sub clear {
 	my $self = shift;
+	$self->Subwidget('XText')->clear;
 	$self->Kamelon->Reset;
 	$self->configure(-syntax => 'None');
-	$self->Subwidget('XText')->clear;
 }
 
 sub Colored {
@@ -560,6 +639,12 @@ sub FindClose {
 	my $self = shift;
 	$self->Subwidget('SandR')->packForget;
 }
+
+# sub FindNext {
+# 	my ($self, $direction, $mode, $case, $find) = @_;
+# 	print "Search $direction, $mode, $case, $find\n";
+# 	return $self->Subwidget('XText')->FindNext($direction, $mode, $case, $find);
+# }
 
 sub foldButton {
 	my ($self, $line) = @_;
@@ -680,7 +765,6 @@ sub FoldInf {
 
 sub foldsCheck {
 	my $self = shift;
-
 	return unless $self->cget('-showfolds');
 
 	my $folds = $self->Kamelon->Formatter->Folds;
@@ -694,6 +778,7 @@ sub foldsCheck {
 	$self->foldsClear;
 
 	my $count = 0;
+	my @shown = ();
 	while ($line <= $last) {
 		while ($self->isHidden($line)) { $line ++ }
 		if (exists $folds->{$line}) {
@@ -703,11 +788,13 @@ sub foldsCheck {
 			my $bh = $but->reqheight;
 			my $delta = int(($he - $bh) / 2);
 			$but->place(-x => 0, -y => $y + $delta);
+			push @shown, $but;
 			$inf->[$count] = $but;
 		}
 		$count ++;
 		$line ++;
 	}
+	$self->{FOLDSSHOWN} = \@shown;
 	while (@$inf >= $count) {
 		pop @$inf;
 	}
@@ -715,15 +802,16 @@ sub foldsCheck {
 
 sub foldsClear {
 	my $self = shift;
-	my $inf = $self->FoldInf;
-	my $count = 0;
-	for (@$inf) { 
-		if (defined $_) {
-			$_->placeForget;
-			$inf->[$count] = undef;
-		};
-		$count ++;
+	my $shown = $self->{FOLDSSHOWN};
+	for (@$shown) { 
+		$_->placeForget;
 	}
+	$self->{FOLDSSHOWN} = [];
+}
+
+sub foldsMenuPop {
+	my ($self, $x, $y) = @_;
+	$self->Subwidget('Foldsmenu')->post($x, $y);
 }
 
 =item B<fontCompose>I<($font, %options)>
@@ -773,7 +861,7 @@ sub highlightCheck {
 	my ($self, $pos) = @_;
 	return if $self->NoHighlighting;
 	my $line = $self->linenumber($pos);
-	$self->highlightPurge($line);
+	$self->highlightPurge($line) if $line <= $self->Colored;
 }
 
 sub highlightinterval {
@@ -1154,10 +1242,14 @@ sub themeDialog {
 		-default_button => 'Ok',
 		-cancel_button => 'Cancel',
 	);
+	my $historyfile;
+	my $config = $self->cget('-configdir');
+	$historyfile = "$config/recent_colors";
 	my $editor = $dialog->add('TagsEditor',
 		-defaultbackground => $self->Subwidget('XText')->cget('-background'),
 		-defaultforeground => $self->Subwidget('XText')->cget('-foreground'),
 		-defaultfont => $self->Subwidget('XText')->cget('-font'),
+		-historyfile => $historyfile,
 		-relief => 'sunken',
 		-borderwidth => 2,
 	)->pack(-expand => 1, -fill => 'both', -padx => 2, -pady => 2);
@@ -1273,6 +1365,17 @@ sub ViewMenuItems {
 	my @values = (-onvalue => 1, -offvalue => 0);
 	my $v;
 	tie $v,'Tk::Configure',$self,'-wrap';
+	my $match = $self->cget('-match');
+	my $curlies = '';
+	$curlies = '{}' if $match =~ /\{\}/;
+	my $paren = '';
+	$paren = '()' if $match =~ /\(\)/;
+	my $brackets = '';
+	$brackets = '[]' if $match =~ /\[\]/;
+	my @opt = (
+		-command => sub  { $self->configure('-match',  $curlies . $paren . $brackets) },
+		-offvalue => '',
+	);
 	my @items = ( 
 		[checkbutton => '~Auto indent', @values, -variable => \$a],
 		['cascade'=> '~Wrap', -tearoff => 0, -menuitems => [
@@ -1280,13 +1383,18 @@ sub ViewMenuItems {
 			[radiobutton => 'Character', -variable => \$v, -value => 'char'],
 			[radiobutton => 'None', -variable => \$v, -value => 'none'],
 		]],
+		['cascade'=> '~Match', -tearoff => 0, -menuitems => [
+			[checkbutton => '() Parenthesis', @opt, -variable => \$paren, -onvalue => '()'],
+			[checkbutton => '{} Curlies', @opt, -variable => \$curlies, -onvalue => '{}'],
+			[checkbutton => '[] Brackets',@opt, -variable => \$brackets, -onvalue => '[]'],
+		]],
 		[command => '~Colors', -command => [themeDialog => $self]],
 		'separator',
 		[checkbutton => 'Code ~folds', @values, -variable => \$f],
 		[checkbutton => '~Line numbers', @values, -variable => \$n],
 		[checkbutton => '~Status bar', @values, -variable => \$s],
 	);
-	return \@items
+	return @items
 }
 
 =item B<visualBegin>
@@ -1307,9 +1415,11 @@ Returns the line number of the last visible line.
 
 Hans Jeuken (hanje at cpan dot org)
 
-=head1 BUGS
+=head1 BUGS AND CAVEATS
 
-Unknown. If you find any, please contact the author.
+Matching {}, [] and () does not take strings with matchable symbols into account.
+
+If you find any, please contact the author.
 
 =head1 SEE ALSO
 

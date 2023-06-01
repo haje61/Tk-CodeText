@@ -9,6 +9,8 @@ use Data::Dumper;
 
 BEGIN { use_ok('Tk::CodeText::TagsEditor') };
 
+# $delay = 3000;
+
 createapp;
 
 my @defaultattributes = (

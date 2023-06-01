@@ -2,7 +2,7 @@ package Tk::XText;
 
 =head1 NAME
 
-Tk:XText - Extended Text widget
+Tk::XText - Extended Text widget
 
 =cut
 
@@ -45,13 +45,19 @@ within the L<Tk::CodeText> context. Otherwise see there.
 
 =item Switch: B<-autoindent>
 
-=item Switch: B<-disablemenu>
+.
 
 =item Name: B<disableMenu>
 
 =item Class: B<DisableMenu>
 
+=item Switch: B<-disablemenu>
+
+.
+
 =item Switch: B<-findandreplacecall>
+
+.
 
 =item Name: B<indentStyle>
 
@@ -59,13 +65,23 @@ within the L<Tk::CodeText> context. Otherwise see there.
 
 =item Switch: B<-indentstyle>
 
+.
+
+=item Switch: B<-logcall>
+
+.
+
 =item Name: B<match>
 
 =item Class: B<Match>
 
 =item Switch: B<-match>
 
+.
+
 =item Switch: B<-matchoptions>
+
+.
 
 =item Switch: B<-mlcommentend>
 
@@ -84,18 +100,6 @@ triggering syntax highlighting/code folding.
 =item Switch: B<-slcomment>
 
 The start string of a single line comment.
-
-=item Switch: B<-updatecall>
-
-Called during loading and saving. It is called every B<-updatelines> 
-with a percentage of the progress as parameter. Used for creating a
-progress bar in L<Tk::CodeText>.
-
-=item Name: B<updateLines>
-
-=item Class: B<UpdateLines>
-
-=item Switch: B<-updatelines>
 
 =back
 
@@ -133,9 +137,7 @@ sub Populate {
 	$self->{BUFFERMODIFIED} = 0;
 	$self->{BUFFERSTART} = '1.0';
 	$self->{BUFFERREPLACE} = '';
-	$self->{REDOEMPTYMODIFIED} = 0;
 	$self->{REDOSTACK} = [];
-	$self->{UNDOEMPTYMODIFIED} = 0;
 	$self->{UNDOSTACK} = [];
 
 	$self->ResetRedo;
@@ -147,14 +149,13 @@ sub Populate {
 		-disablemenu => ['PASSIVE', 'disableMenu', 'Disablemenu', 0],
 		-findandreplacecall => ['PASSIVE'],
 		-indentstyle => ['PASSIVE', 'indentStyle', 'IndentStyle', "tab"],
+		-logcall => ['CALLBACK', undef, undef, sub {}],
 		-match => ['PASSIVE', 'match', 'Match', '[]{}()'],
-		-matchoptions	=> ['METHOD', undef, undef, [-background => 'red', -foreground => 'yellow']],
+		-matchoptions	=> ['METHOD', undef, undef, [-background => 'blue', -foreground => 'yellow']],
 		-mlcommentend => ['PASSIVE'],
 		-mlcommentstart => ['PASSIVE'],
 		-modifycall => ['CALLBACK', undef, undef, sub {}],
 		-slcomment => ['PASSIVE'],
-		-updatecall => ['CALLBACK', undef, undef, sub {}],
-		-updatelines => ['PASSIVE', 'updateLines', 'UpdateLines', 100],
 		DEFAULT => [ 'SELF' ],
 	);
 	$self->eventAdd('<<Find>>', '<F8>');
@@ -219,8 +220,9 @@ sub BufferStart {
 =cut
 
 sub canUndo {
-	my $stack = $_[0]->UndoStack;
-	return (@$stack > 0)
+	my $self = shift;
+	my $stack = $self->UndoStack;
+	return ((@$stack > 0) or ($self->Buffer ne ''));
 }
 
 =item B<canRedo>
@@ -253,7 +255,7 @@ sub ClassInit {
 
 sub clear {
 	my $self = shift;
-	$self->SUPER::delete('1.0', 'end');
+	$self->delete('1.0', 'end');
 
 	$self->ResetRedo;
 	$self->ResetUndo;
@@ -262,7 +264,7 @@ sub clear {
 	$self->BufferMode('');
 	$self->BufferModified(0);
 	$self->BufferReplace('');
-	$self->BufferStart($self->index('insert'));
+	$self->BufferStart('1.0');
 	$self->editModified(0);
 	$self->OverstrikeMode(0);
 
@@ -274,19 +276,9 @@ sub clearModified {
 	$self->Flush;
 	$self->editModified(0);
 	$self->BufferModified(0);
-
 	my $r = $self->RedoStack;
 	my $u = $self->UndoStack;
-
 	for (@$r, @$u) { $_->{'modified'} = 1 }
-
-	my $clredo = 0;
-	$clredo = 1 if @$r;
-	$self->RedoEmptyModified($clredo);
-
-	my $clundo = 0;
-	$clundo = 1 if @$u;
-	$self->UndoEmptyModified($clundo);
 }
 
 =item B<comment>
@@ -313,8 +305,10 @@ sub comment {
 			$self->tagAdd('sel',$rb, $re);
 			$self->RecordUndo('replace', $modified, $rb, $old, $new);
 			$self->Callback('-modifycall', $rb);
+			my $lines = $self->linenumber($re) - $self->linenumber($rb);
+			$self->log("Commented $lines lines");
 		} elsif (defined $slstart) { 
-			$self->selectionModify($slstart, 0)		
+			$self->selectionModify($slstart, 0, 'Commented');
 		}
 	} else { 
 		#single line operation
@@ -335,8 +329,8 @@ sub comment {
 
 sub CommentType {
 	my $self = shift;
-	if ($self->SelectionExists) {
-		my $mode= 'single'; #does the selection span over multiple lines?
+	if ($self->selectionExists) {
+		my $mode = 'single'; #does the selection span over multiple lines?
 		my ($rb, $re) = $self->tagRanges('sel');
 		$mode = 'multi' if ($self->linenumber($rb) < $self->linenumber($re));
 		return $mode
@@ -370,7 +364,7 @@ sub DoAutoIndent {
 
 sub EditMenuItems {
 	my $self = shift;
-	return [
+	return (
 		["command"=>'~Copy',
 			-accelerator => 'CTRL+C',
 			-command => [$self => 'clipboardCopy']
@@ -410,7 +404,7 @@ sub EditMenuItems {
 			-accelerator => 'CTRL+SHIFT+J',
 			-command => [$self => 'unindent']
 		],
-	];
+	);
 }
 
 sub EmptyDocument { $_[0]->clear }
@@ -519,7 +513,7 @@ sub indent {
 	my $self = shift;
 	my $ichar = $self->indentString;
 	if ($self->selectionExists) {
-		$self->selectionModify($ichar, 0);
+		$self->selectionModify($ichar, 0, 'Indented');
 	} else {
 		my $begin = $self->index('insert linestart');
 		my $old = $self->get($begin, "$begin lineend");
@@ -607,27 +601,25 @@ sub load {
 		warn "cannot open $file";
 		return 0
 	};
-	my $size = -s $file;
-	my $loaded = 0;
-	my $count = 0;
-	my $thresh = $self->cget('-updatelines');
 	$self->clear;
 	while (my $line = <INFILE>) {
 		$self->SUPER::insert('end', $line);
-		$loaded = $loaded + length($line);
-		$count ++;
-		if ($count >= $thresh) {
-			my $perc = int(($loaded / $size) * 100);
-			$self->Callback('-updatecall', $perc);
-			$count = 0;
-		}
 	}
-	$self->Callback('-updatecall', 100);
 	close INFILE;
 	$self->goTo('1.0');
 	$self->editModified(0);
 	$self->Callback('-modifycall', '1.0');
+	$self->log("Loaded $file");
 	return 1
+}
+
+=item B<log>
+
+=cut
+
+sub log {
+	my ($self, $message) = @_;
+	$self->Callback('-logcall', $message);
 }
 
 sub matchCheck {
@@ -845,12 +837,14 @@ sub redo {
 			my $len = length($text);
 			$self->SUPER::insert($pos, $text);
 			$self->markSet('insert', $self->index("$pos + $len chars"));
+			$self->see('insert');
 		} elsif ($mode eq 'delete') {
 			my $content = $o->{'content'};
 			my ($pos, $text) = @$content;
 			my $len = length($text);
 			$self->SUPER::delete($pos, "$pos + $len chars");
 			$self->markSet('insert', $pos);
+			$self->see('insert');
 		} elsif ($mode eq 'replace') {
 			my $content = $o->{'content'};
 			my ($pos, $old, $new) = @$content;
@@ -859,13 +853,14 @@ sub redo {
 			$self->SUPER::insert($pos, $new);
 			my $lnew = length($new);
 			$self->markSet('insert', "$pos + $lnew chars");
+			$self->see('insert');
 		} else {
 			carp "invalid redo mode $mode, should be 'delete', 'insert', or 'replace'\n";
 		}
 # 		if ($self->UndoStackEmpty) {
 # 			$self->editModified($self->UndoEmptyModified);
 # 		} else {
-# 			$self->editModified($o->{'modified'});
+		$self->editModified($o->{'redo_modified'});
 # 		}
 		if (my $sel = $o->{'selection'}) {
 			$self->unselectAll;
@@ -876,20 +871,8 @@ sub redo {
 	}
 }
 
-sub RedoEmptyModified {
-	my $self = shift;
-	$self->{REDOEMPTYMODIFIED} = shift if @_;
-	return $self->{REDOEMPTYMODIFIED}
-}
-
 sub RedoStack {
 	return $_[0]->{REDOSTACK}
-}
-
-sub RedoStackEmpty {
-	my $self = shift;
-	my $stack = $self->{REDOSTACK};
-	return (@$stack eq [])
 }
 
 sub ReplaceSelectionsWith {
@@ -950,27 +933,16 @@ sub save {
 		warn "cannot open $file";
 		return 0
 	};
-	my $size = length($self->get('1.0', 'end - 1c'));
-	my $saved = 0;
-	my $count = 0;
-	my $thresh = $self->cget('-updatelines');
 	my $index = '1.0';
 	while ($self->compare($index,'<','end')) {
 		my $end = $self->index("$index lineend + 1c");
 		my $line = $self->get($index,$end);
 		print OUTFILE $line;
 		$index = $end;
-		$saved = $saved + length($line);
-		$count ++;
-		if ($count >= $thresh) {
-			my $perc = int(($saved / $size) * 100);
-			$self->Callback('-updatecall', $perc);
-			$count = 0;
-		}
 	}
-	$self->Callback('-updatecall', 100);
 	close OUTFILE;
 	$self->clearModified;
+	$self->log("Saved $file");
 	return 1
 }
 
@@ -992,7 +964,7 @@ sub selectionExists {
 }
 
 sub selectionModify {
-	my ($self, $char, $mode) = @_;
+	my ($self, $char, $mode, $operation) = @_;
 	my @ranges = $self->tagRanges('sel');
 	my $start = $ranges[0];
 	my $end = $self->index($ranges[1]);
@@ -1014,8 +986,10 @@ sub selectionModify {
 	my $new = $self->get(@ranges);
 	$self->RecordUndo('replace', $modified, $ranges[0], $old, $new);
 	$self->Callback('-modifycall', $ranges[0]);
-# 	$self->tagAdd('sel', @ranges);
+	my $lines = $self->linenumber($ranges[1]) - $self->linenumber($ranges[0]);
+	$self->log("$operation $lines lines");
 }
+
 
 =item B<uncomment>
 
@@ -1043,9 +1017,11 @@ sub uncomment {
 				$self->tagAdd('sel', $rb, $re);
 				$self->RecordUndo('replace', $modified, $rb, $old, $new);
 				$self->Callback('-modifycall', $rb);
+				my $lines = $self->linenumber($re) - $self->linenumber($rb);
+				$self->log("Uncommented $lines lines");
 			}
 		} elsif (defined $slstart) {
-			$self->selectionModify($slstart, 1)		
+			$self->selectionModify($slstart, 1, 'Uncommented')		
 		}
 	} else {
 		my $rb = $self->index('insert linestart');
@@ -1072,10 +1048,11 @@ sub uncomment {
 
 sub undo {
 	my $self = shift;
-	$self->Flush;
 	if ($self->canUndo) {
+		$self->Flush;
 
 		my $o = $self->PullUndo;
+		my $mod = $self->editModified;
 		$self->PushRedo($o);
 
 		my $mode = $o->{'mode'};
@@ -1085,12 +1062,14 @@ sub undo {
 			my $len = length($text);
 			$self->SUPER::insert($pos, $text);
 			$self->markSet('insert', $self->index("$pos + $len chars"));
+			$self->see('insert');
 		} elsif ($mode eq 'insert') {
 			my $content = $o->{'content'};
 			my ($pos, $text) = @$content;
 			my $len = length($text);
 			$self->SUPER::delete($pos, "$pos + $len chars");
 			$self->markSet('insert', $pos);
+			$self->see('insert');
 		} elsif ($mode eq 'replace') {
 			my $content = $o->{'content'};
 			my ($pos, $old, $new) = @$content;
@@ -1099,13 +1078,15 @@ sub undo {
 			$self->SUPER::insert($pos, $old);
 			my $lold = length($old);
 			$self->markSet('insert', $self->index("$pos + $lold chars"));
+			$self->see('insert');
 		} else {
 			carp "invalid undo mode '$mode"."', should be 'delete', 'insert', or 'replace'\n";
 		}
 # 		if ($self->RedoStackEmpty) {
 # 			$self->editModified($self->RedoEmptyModified);
 # 		} else {
-			$self->editModified($o->{'modified'});
+		$self->editModified($o->{'modified'});
+		$o->{'redo_modified'} = $mod;
 # 		}
 		if (my $sel = $o->{'selection'}) {
 			$self->unselectAll;
@@ -1116,22 +1097,9 @@ sub undo {
 	}
 }
 
-sub UndoEmptyModified {
-	my $self = shift;
-	$self->{UNDOEMPTYMODIFIED} = shift if @_;
-	return $self->{UNDOEMPTYMODIFIED}
-}
-
 sub UndoStack {
 	return $_[0]->{UNDOSTACK}
 }
-
-sub UndoStackEmpty {
-	my $self = shift;
-	my $stack = $self->{UNDOSTACK};
-	return (@$stack eq [])
-}
-
 
 =item B<unindent>
 
@@ -1141,7 +1109,7 @@ sub unindent {
 	my $self = shift;
 	my $ichar = $self->indentString;
 	if ($self->selectionExists) {
-		$self->selectionModify($ichar, 1);
+		$self->selectionModify($ichar, 1, 'Unindent');
 	} else {
 		my $modified = $self->editModified;
 		my $index = $self->index('insert');
