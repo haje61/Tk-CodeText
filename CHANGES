@@ -1,9 +1,11 @@
 Tk::CodeText module changes log
 
 01 june 2023
+	Update to version 0.40.
 	Made a rewrite from scratch. See Readme.md.
 
 27 march 2004
+	update to version 0.3.4
 	removed -headerbackground bug from RulesEditor
 	renamed test.pl to demo.pl so testing without a connection to an
 	X-server will not fail.

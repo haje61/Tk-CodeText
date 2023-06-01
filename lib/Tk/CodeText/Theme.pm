@@ -312,7 +312,7 @@ sub tagList {
 	return sort keys %Attributes;
 }
 
-=item B<validOption>I<($option)
+=item B<validOption>I<($option)>
 
 Returns true if $option is in the list of available options.
 
@@ -323,7 +323,7 @@ sub validOption {
 	return exists $Options{$option};
 }
 
-=item B<validTag>I<($tag)
+=item B<validTag>I<($tag)>
 
 Returns true if $tag is in the list of available tags.
 

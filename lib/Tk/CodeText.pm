@@ -48,7 +48,7 @@ use base qw(Tk::Derived Tk::Frame);
 
 use Syntax::Kamelon;
 use Tk;
-
+use Tie::Watch;
 require Tk::CodeText::StatusBar;
 require Tk::CodeText::TagsEditor;
 require Tk::CodeText::Theme;
@@ -211,6 +211,11 @@ By default it is a bitmap defined in this module.
 Image used for the expand state of a folding point.
 By default it is a bitmap defined in this module.
 
+=item Switch: B<-saveimage>
+
+The icon image used to indicate the text is modified on the status bar.
+By default it is an internally defined xpm.
+
 =item Switch: B<-scrollbars>
 
 Default value 'osoe'. Specifies if and how scrollbars
@@ -218,6 +223,10 @@ are to be used. If you set it to an ampty string no
 scrollbars will be created. See also L<Tk::Scrolled>.
 
 Only available at create time.
+
+=item Switch: B<-statusinterval>
+
+By default 200 ms. Update interval for the status bar.
 
 =item Name: B<showFolds>
 
@@ -496,10 +505,12 @@ sub Populate {
 			-data => $plusimg,
 			-foreground => $fg,
 		)],
+		-saveimage => [$statusbar],
 		-showfolds => [qw/METHOD showFolds ShowFolds/, 1],
 		-shownumbers => [qw/METHOD showNumers ShowNumbers/, 1],
 		-showstatus => [qw/METHOD showStatus ShowStatus/, 1],
 		-syntax => [qw/METHOD syntax Syntax/, 'None'],
+		-statusinterval => [$statusbar],
 		-themefile => ['METHOD'],
 		DEFAULT => [ $text ],
 	);
@@ -1362,9 +1373,18 @@ sub ViewMenuItems {
 	my $s;
 	tie $s, 'Tk::Configure', $self, '-showstatus';
 
+	my $v = $self->cget('-wrap');
+	Tie::Watch->new(
+		-variable => \$v,
+		-store => sub {
+			my ($watch, $value) = @_;
+			$watch->Store($value);
+			$self->configure(-wrap => $v);
+			$self->contentCheckLight;
+		},
+	);
+
 	my @values = (-onvalue => 1, -offvalue => 0);
-	my $v;
-	tie $v,'Tk::Configure',$self,'-wrap';
 	my $match = $self->cget('-match');
 	my $curlies = '';
 	$curlies = '{}' if $match =~ /\{\}/;
@@ -1425,6 +1445,11 @@ If you find any, please contact the author.
 
 =over 4
 
+=item L<Tk::Text>
+
+=item L<Tk::XText>
+
+=item L<Syntax::Kamelon::Syntaxes>
 
 =back
 

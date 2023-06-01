@@ -3,20 +3,8 @@
 use strict;
 use warnings;
 
-use Tk::GtkSettings qw(export2xrdb initDefaults groupAdd groupMembers groupMembersAdd groupMembersReplace groupOption);
-
-initDefaults;
-my @txts = groupMembers('content');
-my @newtxts = ('XText');
-while (@txts) {
-	my $new = shift @txts;
-	push @newtxts, $new unless $new eq 'CodeText';
-}
-groupMembersReplace('content', @newtxts);
-groupAdd('menu');
-groupMembersAdd('menu', 'Menu');
-groupOption('menu', 'borderWidth', 1);
-export2xrdb;
+use Tk::GtkSettings qw(applyGtkSettings);
+applyGtkSettings;
 
 use Tk;
 require Tk::CodeText;
@@ -226,6 +214,13 @@ $app->configure(-menu => $app->Menu(
 				['command' => '~Replace',
 					-accelerator => 'CTRL+R',
 					-command => ['FindAndReplacePopUp', $txt],
+				],
+				['separator' => '-'],
+				['command' => '~Collapse all folds',
+					-command => ['foldCollapseAll', $txt],
+				],
+				['command' => '~Expand all folds',
+					-command => ['foldExpandAll', $txt],
 				],
 				['separator' => '-'],
 				$txt->ViewMenuItems,

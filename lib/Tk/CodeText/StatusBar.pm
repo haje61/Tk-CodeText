@@ -251,7 +251,7 @@ Provides a status bar to L<Tk::CodeText>.
 
 =over 4
 
-=item Switch: B<-interval>
+=item Switch: B<-statusinterval>
 
 By default 200 ms. Update interval for the status bar.
 
@@ -370,7 +370,7 @@ sub Populate {
 	$self->after(200, ['StatusUpdate', $self]);
 
 	$self->ConfigSpecs(
-		-interval => ['PASSIVE', undef, undef, 200],
+		-statusinterval => ['PASSIVE', undef, undef, 200],
 		-saveimage => [{-image => $modlab}, undef, undef, $self->Pixmap(-data => $save_pixmap) ],
 		-widget => ['PASSIVE', undef, undef, $widget],
 		DEFAULT => [ $self ],
@@ -427,7 +427,7 @@ sub StatusUpdate {
 	} else {
 		$ovr = 'INSERT'
 	}
-	$self->Info("Line $line of $lines, Column $column, Chars $size.   $ovr");
+	$self->Info("Line $line of $lines, Column $column, Size $size.   $ovr");
 	$self->Indent('Indent: ' . $text->cget('-indentstyle'));
 	$self->Syntax('Syntax: ' . $text->syntax);
 	my $tabs = $text->cget('-tabs');
@@ -446,7 +446,7 @@ sub StatusUpdate {
 		$modlab->packForget
 	}
 
-	$self->after($self->cget('-interval'), ['StatusUpdate', $self]);
+	$self->after($self->cget('-statusinterval'), ['StatusUpdate', $self]);
 }
 
 =head1 AUTHOR
