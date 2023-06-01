@@ -1,52 +1,19 @@
-package MyKamelon;
-use strict;
-use warnings;
-
-use base qw(Syntax::Kamelon);
-
-sub new {
-	my $class = shift;
-	my $widget = shift;
-	my $self = $class->SUPER::new(@_);
-	$self->{WIDGET} = $widget;
-	return $self
-}
-
-sub ParseResultEndRegion {
-	my $self = shift;
-	my $region = pop @_;
-	my $formatter = $self->Formatter;
-	my $widget = $self->Widget;
-	my $top = $formatter->FoldStackTop;
-	if (defined $top) {
-		my $begin = $formatter->FoldStackTop->{start};
-		$formatter->FoldEnd($region);
-		$widget->foldsCheck if (($begin >= $widget->visualBegin) and ($begin <= $widget->visualEnd));
-	}
-	my $parser = pop @_;
-	return &$parser($self, @_);
-}
-
-sub Widget { return $_[0]->{WIDGET} }
-
-###########################################################################
-
 package Tk::CodeText;
 
 =head1 NAME
 
-Tk:CodeText - Programmer's Swiss army knife Text widget.
+Tk::CodeText - Programmer's Swiss army knife Text widget.
 
 =cut
 
 use strict;
 use warnings;
 use vars qw($VERSION);
-$VERSION = '0.40';
+$VERSION = '0.41';
 
 use base qw(Tk::Derived Tk::Frame);
 
-use Syntax::Kamelon;
+use Tk::CodeText::Kamelon;
 use Tk;
 use Tie::Watch;
 require Tk::CodeText::StatusBar;
@@ -324,7 +291,7 @@ sub Populate {
 	$self->{FOLDINF} = [];
 	$self->{FOLDSSHOWN} = [];
 	$self->{FOLDSVISIBLE} = 0;
-	$self->{KAMELON} = MyKamelon->new($self, @ko);
+	$self->{KAMELON} = Tk::CodeText::Kamelon->new($self, @ko);
 	$self->{HIGHLIGHTINTERVAL} = 1;
 	$self->{LOOPACTIVE} = 0;
 	$self->{NOHIGHLIGHTING} = 1;

@@ -1,6 +1,10 @@
 Tk::CodeText module changes log
 
 01 june 2023
+	Update to version 0.41.
+	Moved internal MyKamelon to it's own pm, so metacpan does not have problems with it.
+
+01 june 2023
 	Update to version 0.40.
 	Made a rewrite from scratch. See Readme.md.
 

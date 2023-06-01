@@ -1,6 +1,7 @@
 bin/codetext
 CHANGES
 lib/Tk/CodeText.pm
+lib/Tk/CodeText/Kamelon.pm
 lib/Tk/CodeText/StatusBar.pm
 lib/Tk/CodeText/TagsEditor.pm
 lib/Tk/CodeText/Theme.pm
