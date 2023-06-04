@@ -1,3 +1,5 @@
+package Tk::CodeText::StatusBar;
+
 package PopTabs;
 
 use strict;
@@ -190,7 +192,7 @@ sub Select {
 ##                 Main Module                                          ##
 ##########################################################################
 
-package Tk::CodeText::StatusBar;
+package main;
 
 =head1 NAME
 
@@ -201,7 +203,7 @@ Tk:CodeText::StatusBar - Status bar for  L<Tk::CodeText>
 use strict;
 use warnings;
 use vars qw($VERSION);
-$VERSION = '0.40';
+$VERSION = '0.42';
 
 use base qw(Tk::Derived Tk::Frame);
 

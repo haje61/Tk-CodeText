@@ -9,7 +9,7 @@ Tk::CodeText - Programmer's Swiss army knife Text widget.
 use strict;
 use warnings;
 use vars qw($VERSION);
-$VERSION = '0.41';
+$VERSION = '0.42';
 
 use base qw(Tk::Derived Tk::Frame);
 
@@ -113,7 +113,7 @@ It keeps track of the last saving point and selections
 
 =item automatic indentation
 
-=item matching of {}, () and [] pairs
+=item matching of nested {}, () and [] pairs
 
 =back
 
@@ -132,9 +132,9 @@ level and style of the previous line.
 
 =item Switch: B<-configdir>
 
-An empty string by default. If set to an
-existing folder that folder will be used
-for saving and loading theme files.
+An empty string by default. If set to an existing folder that folder will be used
+for config files. Currently there is only one of those. The recent colors for the 
+TagsEditor.
 
 =item Switch: B<-disablemenu>
 
@@ -371,6 +371,7 @@ sub Populate {
 		-textvariable => \$find,
 	)->pack(@pack, -expand => 1, -fill => 'x');
 	$e->bind('<Escape>', [$self, 'FindClose']);
+	$e->bind('<Return>', sub { $self->FindNext('-forward', $reg, $case, $find) });
 	$sframe->Button(
 		-text => 'Next',
 		-command => sub { $self->FindNext('-forward', $reg, $case, $find) },
@@ -412,6 +413,10 @@ sub Populate {
 		-textvariable => \$replace,
 	)->pack(@pack, -expand => 1, -fill => 'x');
 	$r->bind('<Escape>', [$self, 'FindClose']);
+	$r->bind('<Return>',  sub {
+		$self->ReplaceSelectionsWith($replace) if $self->SelectionExists;
+		$self->FindNext('-forward', $reg, $case, $find);
+	});
 	$rframe->Button(
 		-text => 'Replace',
 		-command => sub {
@@ -673,7 +678,7 @@ sub foldCollapse {
 	$self->foldsCheck;
 }
 
-=item B>foldCollapseAll>
+=item B<foldCollapseAll>
 
 Collapses all folding points.
 
@@ -710,7 +715,7 @@ sub foldExpand {
 	$self->foldsCheck;
 }
 
-=item B>foldExpandAll>
+=item B<foldExpandAll>
 
 Expands all folding points.
 

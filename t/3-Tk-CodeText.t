@@ -58,21 +58,21 @@ if (defined $app) {
 		],
 	));
 	$app->geometry('800x600+200+200');
+}
 
-	#testing accessors
-	my @accessors = qw(Colored ColorInf FoldButtons FoldInf highlightinterval LoopActive NoHighlighting SaveFirstVisible SaveLastVisible);
-	for (@accessors) {
-		my $method = $_;
-		push @tests, [sub {
-			my $default = $text->$method;
-			$text->$method('blieb');
-			my $res1 = $text->$method;
-			$text->$method('quep');
-			my $res2 = $text->$method;
-			$text->$method($default);
-			return (($res1 eq 'blieb') and ($res2 eq 'quep'));
-		}, 1, "Accessor $method"];
-	}
+#testing accessors
+my @accessors = qw(Colored ColorInf FoldButtons FoldInf highlightinterval LoopActive NoHighlighting SaveFirstVisible SaveLastVisible);
+for (@accessors) {
+	my $method = $_;
+	push @tests, [sub {
+		my $default = $text->$method;
+		$text->$method('blieb');
+		my $res1 = $text->$method;
+		$text->$method('quep');
+		my $res2 = $text->$method;
+		$text->$method($default);
+		return (($res1 eq 'blieb') and ($res2 eq 'quep'));
+	}, 1, "Accessor $method"];
 }
 
 push @tests, (
