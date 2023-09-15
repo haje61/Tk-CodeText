@@ -9,7 +9,7 @@ Tk::CodeText - Programmer's Swiss army knife Text widget.
 use strict;
 use warnings;
 use vars qw($VERSION);
-$VERSION = '0.42';
+$VERSION = '0.43';
 
 use base qw(Tk::Derived Tk::Frame);
 
@@ -453,7 +453,7 @@ sub Populate {
 	my $statusbar = $self->StatusBar(
 		-widget => $self,
 	);
-	$self->after(10, ['StatusUpdate', $statusbar]);
+	$self->after(10, ['updateStatus', $statusbar]);
 	#create progressbar for loading and saving
 	$self->Advertise(XText => $text);
 	$self->Advertise(Numbers => $numbers);
@@ -477,6 +477,7 @@ sub Populate {
 			-data => $plusimg,
 			-foreground => $fg,
 		)],
+		-position => ['METHOD'],
 		-saveimage => [$statusbar],
 		-showfolds => [qw/METHOD showFolds ShowFolds/, 1],
 		-shownumbers => [qw/METHOD showNumers ShowNumbers/, 1],
@@ -505,6 +506,8 @@ sub Populate {
 
 	#configure all the bindings for the text widget
 	$text->bind('<KeyPress>', [$self, 'OnKeyPress', Ev('K') ]);
+	$text->bind('<FocusIn>', [$self, 'OnFocusIn']);
+	$text->bind('<FocusOut>', [$self, 'OnFocusOut']);
 	#lazy events
 	my @levents = qw(
 		ButtonPress ButtonRelease-1 
@@ -620,14 +623,9 @@ sub FindAndOrReplace {
 
 sub FindClose {
 	my $self = shift;
+	$self->Subwidget('XText')->focus;
 	$self->Subwidget('SandR')->packForget;
 }
-
-# sub FindNext {
-# 	my ($self, $direction, $mode, $case, $find) = @_;
-# 	print "Search $direction, $mode, $case, $find\n";
-# 	return $self->Subwidget('XText')->FindNext($direction, $mode, $case, $find);
-# }
 
 sub foldButton {
 	my ($self, $line) = @_;
@@ -834,6 +832,12 @@ The info is a hash with keys -family -size -weight -slant -underline -overstrike
 Sets the insert cursor to $index.
 
 =cut
+
+sub goTo {
+	my ($self, $index) = @_;
+	$self->Subwidget('XText')->goTo($index);
+	$self->contentCheckLight;
+}
 
 sub hideLine {
 	my ($self, $line) = @_;
@@ -1054,6 +1058,21 @@ sub NoHighlighting {
 	return $self->{NOHIGHLIGHTING}
 }
 
+sub OnFocusIn {
+	my $self = shift;
+	my $flag = $self->{'nohl_save'};
+	$self->NoHighlighting($flag) if defined $flag;
+	$self->highlightLoop;
+	$self->Subwidget('Statusbar')->updateResume;
+}
+
+sub OnFocusOut {
+	my $self = shift;
+	$self->{'nohl_save'} = $self->NoHighlighting;
+	$self->NoHighlighting(1);
+	$self->Subwidget('Statusbar')->updatePause;
+}
+
 sub OnKeyPress {
 	my ($self, $key) = @_;
 	if (length($key) > 1) {
@@ -1061,6 +1080,15 @@ sub OnKeyPress {
 	} else {
 		$self->contentCheck;
 	}
+}
+
+sub position {
+	my ($self, $pos) = @_;
+	if (defined $pos) {
+		$self->goTo($pos);
+		$self->see($pos);
+	}
+	return $self->index('insert');
 }
 
 =item B<redo>
@@ -1150,7 +1178,7 @@ sub showstatus {
 				-fill => 'x',
 			);
 			$self->{STATUSVISIBLE} = 1;
-			$f->StatusUpdate;
+			$f->updateStatus;
 		} else {
 			$f->packForget;
 			$self->{STATUSVISIBLE} = 0;
@@ -1317,6 +1345,7 @@ sub themeUpdate {
 			-font => $nfont,
 		);
 	}
+	$self->highlightPurge(1);
 }
 
 =item B<uncomment>
@@ -1430,3 +1459,7 @@ If you find any, please contact the author.
 1;
 
 __END__
+
+
+
+

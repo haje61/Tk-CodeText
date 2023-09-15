@@ -503,6 +503,7 @@ sub getFontInfo {
 sub goTo {
 	my ($self, $pos) = @_;
 	$self->markSet('insert', $pos);
+	$self->see($pos);
 }
 
 =item B<indent>
@@ -1184,3 +1185,4 @@ Unknown. If you find any, please contact the author.
 1;
 
 __END__
+
