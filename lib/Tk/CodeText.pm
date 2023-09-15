@@ -9,7 +9,7 @@ Tk::CodeText - Programmer's Swiss army knife Text widget.
 use strict;
 use warnings;
 use vars qw($VERSION);
-$VERSION = '0.43';
+$VERSION = '0.44';
 
 use base qw(Tk::Derived Tk::Frame);
 
@@ -1299,7 +1299,6 @@ sub themeDialog {
 	if ($button eq 'Ok') {
 		$theme->put($editor->get);
 		$self->themeUpdate;
-		$self->highlightPurge;
 	}
 	$dialog->destroy;
 }

@@ -31,7 +31,7 @@ sub popDown {
 
 ###########################################################################
 
-package mainTk::CodeText::TagsEditor;
+package Tk::CodeText::TagsEditor;
 
 =head1 NAME
 
@@ -42,7 +42,7 @@ Tk:CodeText::TagsEditor - Edit highlighting tags for L<Tk::CodeText>
 use strict;
 use warnings;
 use vars qw($VERSION);
-$VERSION = '0.43';
+$VERSION = '0.44';
 
 use base qw(Tk::Derived Tk::Frame);
 
@@ -380,4 +380,5 @@ Unknown. If you find any, please contact the author.
 1;
 
 __END__
+
 
