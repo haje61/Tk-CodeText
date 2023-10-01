@@ -9,7 +9,7 @@ Tk::CodeText - Programmer's Swiss army knife Text widget.
 use strict;
 use warnings;
 use vars qw($VERSION);
-$VERSION = '0.44';
+$VERSION = '0.45';
 
 use base qw(Tk::Derived Tk::Frame);
 
@@ -167,6 +167,11 @@ against nested occurrences.
 
 Default: [-background => 'blue', -foreground => 'yellow'].
 Specifies the options for the match tag.
+
+=item Switch: B<-menuitems>
+
+Specify the menu items for the left-click popup menu.
+By default set to undef, meaning no popup menu.
 
 =item Switch: B<-minusimg>
 
@@ -848,6 +853,7 @@ sub highlightCheck {
 	my ($self, $pos) = @_;
 	return if $self->NoHighlighting;
 	my $line = $self->linenumber($pos);
+	my $colored = $self->Colored;
 	$self->highlightPurge($line) if $line <= $self->Colored;
 }
 
@@ -871,6 +877,7 @@ sub highlightLine {
 	my $k = $cli->[$num - 1];
 	$kam->StateSet(@$k);
 	my $txt = $xt->get($begin, $end); #get the text to be highlighted
+#	print "'$txt'\n";
 	if ($txt ne '') { #if the line is not empty
 		my $pos = 0;
 		my $start = 0;
@@ -1048,6 +1055,8 @@ sub LoopActive {
 
 sub modifiedCheck {
 	my ($self, $index) = @_;
+	my $line = $self->linenumber($index);
+	$self->Colored($line);
 	$self->highlightCheck($index);
 # 	$self->lnumberCheck;
 }
@@ -1100,6 +1109,10 @@ Redoes the last undo.
 =item B<save>I<($file)>
 
 Saves the text into $file. Returns 1 if successfull.
+
+=item B<saveExport>I<($file)>
+
+Same as save, except it does not clear the modified flag.
 
 =cut
 
@@ -1458,6 +1471,13 @@ If you find any, please contact the author.
 1;
 
 __END__
+
+
+
+
+
+
+
 
 
 

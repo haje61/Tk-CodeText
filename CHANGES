@@ -1,4 +1,9 @@
 Tk::CodeText module changes log
+01 Oct 2023
+	Update to version 0.45
+	Added option -menutiems for the left-click popup menu.
+	Added method saveExport.
+
 15 septemer 2023
 	Update to version 0.44
 	Fixed bug in TagsEditor.
@@ -83,6 +88,8 @@ Tk::CodeText module changes log
 
 02 February 2003
 	First alpha version 0.1
+
+
 
 
 
