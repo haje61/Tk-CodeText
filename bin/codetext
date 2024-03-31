@@ -37,7 +37,7 @@ my %options = (
 	-showstatus => 1,
 	-tabs => '8m',
 	-wrap => 'none',
-	-xmfolder => undef,
+	-xmlfolder => undef,
 );
 
 my @usersettings = ('-autoindent', '-indentstyle', '-match', '-showfolds', '-shownumbers', '-showstatus', '-tabs', '-wrap');

@@ -1,9 +1,11 @@
 Tk::CodeText module changes log
 
-31 march 2024
+01 apr 2024
 	Update to version 0.47
+	Revised TagsEditor
 	Fixed auto indent.
 	Fixed bug with uncommenting.
+	Fixed bug with -xmlfolder. -xmldir no longer exists.
 	made lnumberCheck a bit quieter.
 
 28 Feb 2024
