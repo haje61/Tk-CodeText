@@ -144,7 +144,9 @@ sub Populate {
 	$self->{THEME} = $theme;
 
 	my @columns = ('Tag', 'Foreground', 'Background', 'Bold', 'Italic');
-	my $list = $self->Scrolled('HList',
+	my $list;
+	$list = $self->Scrolled('HList',
+		-browsecmd => sub { $list->selectionClear; $list->anchorClear },
 		-columns => 5,
 		-header => 1,
 		-scrollbars => 'osoe',
@@ -220,6 +222,7 @@ sub Populate {
 		$list->itemCreate($tag, 4, -itemtype => 'window', -widget => $italic);
 	}
 	$self->ConfigSpecs(
+		-background => ['SELF', 'DESCENDANTS'],
 		-defaultbackground => ['PASSIVE', undef, undef, $defaultbackground],
 		-defaultforeground => ['PASSIVE', undef, undef, $defaultforeground],
 		-defaultfont => ['PASSIVE', undef, undef, $defaultfont],
