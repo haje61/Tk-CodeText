@@ -9,7 +9,7 @@ Tk::CodeText - Programmer's Swiss army knife Text widget.
 use strict;
 use warnings;
 use vars qw($VERSION);
-$VERSION = '0.48';
+$VERSION = '0.50';
 
 use base qw(Tk::Derived Tk::Frame);
 
@@ -520,8 +520,7 @@ sub Populate {
 	$text->bind('<KeyPress>', [$self, 'OnKeyPress', Ev('K') ]);
 	#lazy events
 	my @levents = qw(
-		ButtonPress ButtonRelease-1 
-		ButtonRelease-2 B2-Motion 
+		ButtonPress B2-Motion 
 		B1-Motion MouseWheel
 	);
 	foreach my $levent (@levents) {
@@ -1467,6 +1466,8 @@ If you find any, please contact the author.
 1;
 
 __END__
+
+
 
 
 
