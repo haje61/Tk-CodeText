@@ -9,7 +9,7 @@ Tk::CodeText - Programmer's Swiss army knife Text widget.
 use strict;
 use warnings;
 use vars qw($VERSION);
-$VERSION = '0.56';
+$VERSION = '0.57';
 
 use base qw(Tk::Derived Tk::Frame);
 
@@ -1193,7 +1193,7 @@ sub highlightPurge {
 	$line = 1 unless defined $line;
 
 	#purge highlightinfo
-#	$self->highlightRemove($line);
+	$self->highlightRemove($line);
 	$self->Colored($line);
 	my $cli = $self->ColorInf;
 	if (@$cli) { splice(@$cli, $line) };
