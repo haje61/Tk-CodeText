@@ -51,6 +51,10 @@ within the L<Tk::CodeText> context. Otherwise see there.
 
 .
 
+=item Switch: B<-findoptions>
+
+.
+
 =item Switch: B<-findandreplacecall>
 
 .

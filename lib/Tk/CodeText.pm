@@ -163,6 +163,11 @@ If you do not specify it, the B<-menuitems> option is checked.
 
 By default 0. If set the right-click context menu is disabled.
 
+=item Switch: B<-findoptions>
+
+Default: [-background => '#C0FFC0', -foreground => '#000000'](light green and black). 
+Specifies the options for the find tag.
+
 =item Name: B<highlightInterval>
 
 =item Class: B<HighlightInterval>
