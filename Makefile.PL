@@ -3,7 +3,6 @@ use warnings;
 use ExtUtils::MakeMaker;
 
 my $pm = 'CodeText';
-my $ld = '$(INST_LIBDIR)';
 
 WriteMakefile(
 	NAME => "Tk::$pm",
@@ -15,7 +14,7 @@ WriteMakefile(
 		'Syntax::Kamelon' => '0.24',
 		'Test::Tk' => '3.03',
 		'Tk' => '804.030',
-		'Tk::ColorEntry' => '0.08',
+		'Tk::ColorEntry' => '0.11',
 		'Tk::PopList' => '0.09',
 	},
 	ABSTRACT_FROM => "lib/Tk/$pm.pm",

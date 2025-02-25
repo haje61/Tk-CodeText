@@ -1,5 +1,12 @@
 Tk::CodeText module changes log
 
+0.64 25 Feb 2025
+	- Corrected bug in method FindandReplace.
+	- Added routines for showing spaces and tabs.
+	- Added options -showspaces, spacebackground and -tabbackground.
+	- Added methods fixIndent getRange and removeTrailingSpaces.
+	- Tags Find, Space and Tab are raised at the end of each highlight cycle.
+
 0.63 08 Feb 2025
 	- Method 'see' calls the yscrollcmd.
 	- Line numbers font changes with the widget font.
