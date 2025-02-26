@@ -9,7 +9,7 @@ Tk::CodeText - Programmer's Swiss army knife Text widget.
 use strict;
 use warnings;
 use vars qw($VERSION);
-$VERSION = '0.64';
+$VERSION = '0.65';
 
 use base qw(Tk::Derived Tk::Frame);
 
@@ -1284,10 +1284,10 @@ sub highlightLine {
 			my $tag = shift @h;
 			$xt->tagAdd($tag, "$num.$start", "$num.$pos");
 		};
-		$xt->tagRaise('sel');
 		$xt->tagRaise('Find');
 		$xt->tagRaise('Space');
 		$xt->tagRaise('Tab');
+		$xt->tagRaise('sel');
 	};
 	$cli->[$num] = [ $kam->StateGet ];
 #	$self->foldsCheck if $num eq $self->visualEnd;
